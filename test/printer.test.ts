@@ -1,7 +1,7 @@
 import { Parser } from "acorn";
 import { tsPlugin } from "@sveltejs/acorn-typescript";
 import { describe, expect, it } from "vitest";
-import { print, type AST } from "../src/index.ts";
+import type { AST } from "../src/types.ts";
 
 const TsParser = Parser.extend(tsPlugin());
 
