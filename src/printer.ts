@@ -10,7 +10,7 @@ export type MappingFactory<T = unknown> = (input: {
   generatedRange: SourceRange;
 }) => Mapping<T>;
 
-export type PrinterHooks<T = unknown> = {
+export interface PrinterHooks<T = unknown> {
   isUntouched?: (node: AST.Node, context: PrintContext<T>) => boolean;
   printNode?: (
     node: AST.Node,
@@ -21,18 +21,18 @@ export type PrinterHooks<T = unknown> = {
   shouldMergeMappings?: (previous: Mapping<T>, next: Mapping<T>) => boolean;
 };
 
-export type PrintOptions<T = unknown> = PrinterHooks<T> & {
+export interface PrintOptions<T = unknown> extends PrinterHooks<T> {
   source: string;
   sourceName?: string;
   mappingData?: T;
 };
 
-export type PrintResult<T = unknown> = {
+export interface PrintResult<T = unknown> {
   code: string;
   mappings: Mapping<T>[];
 };
 
-export type PrintContext<T = unknown> = {
+export interface PrintContext<T = unknown> {
   readonly options: PrintOptions<T>;
   readonly source: string;
   readonly mappings: Mapping<T>[];
@@ -46,17 +46,17 @@ export type PrintContext<T = unknown> = {
   ) => void;
 };
 
-export type Printer<T = unknown> = {
+export interface Printer<T = unknown> {
   print: (node: AST.Node) => PrintResult<T>;
 };
 
-type InternalContext<T> = PrintContext<T> & {
+interface InternalContext<T> extends PrintContext<T> {
   generatedOffset: number;
   enter: (node: AST.Node) => string;
-  pendingMappings: PendingMapping<T>[];
+  pendingMappings: PendingMapping[];
 };
 
-type PendingMapping<T> = {
+interface PendingMapping {
   node: AST.Node;
   sourceRange: SourceRange;
   generatedRange?: SourceRange;
