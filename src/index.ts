@@ -9,3 +9,4 @@ export {
   type PrinterHooks,
   type SourceRange,
 } from "./printer.ts";
+export type { AST } from "./types.ts";

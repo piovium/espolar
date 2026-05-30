@@ -395,7 +395,10 @@ function printChangedNode<T>(
       return `${context.print(node.expression)}${printTypeParameters(node.typeArguments, context)}`;
     default:
       if (node.type.startsWith("TS")) {
-        return printTypeScriptNode(node, context);
+        return printTypeScriptNode(
+          node as Extract<AST.Node, { type: `TS${string}` }>,
+          context,
+        );
       }
       throw new Error(`Unsupported AST node: ${node.type}`);
   }
@@ -551,7 +554,7 @@ function printClass<T>(
   const id = node.id ? context.print(node.id) : "";
   const typeParameters = printTypeParameters(node.typeParameters, context);
   const superClass = node.superClass
-    ? ` extends ${context.print(node.superClass)}${printTypeParameters(node.superTypeParameters, context)}`
+    ? ` extends ${context.print(node.superClass)}${printTypeParameters(node.superTypeArguments, context)}`
     : "";
   const body = node.body;
   return `class${declaration || id ? " " : ""}${id}${typeParameters}${superClass} ${context.print(body)}`;
@@ -563,7 +566,7 @@ function printClassElement<T>(
 ): string {
   const prefix = [
     node.static ? "static" : "",
-    node.readonly ? "readonly" : "",
+    "readonly" in node && node.readonly ? "readonly" : "",
     node.accessibility,
   ]
     .filter(Boolean)
@@ -572,11 +575,13 @@ function printClassElement<T>(
     ? `[${context.print(node.key)}]`
     : context.print(node.key);
   const value = node.value;
-  const head = `${prefix ? `${prefix} ` : ""}${node.kind === "get" || node.kind === "set" ? `${node.kind} ` : ""}${key}`;
+  const kind = "kind" in node ? node.kind : undefined;
+  const head = `${prefix ? `${prefix} ` : ""}${kind === "get" || kind === "set" ? `${kind} ` : ""}${key}`;
   if (value?.type === "FunctionExpression") {
     return `${head}(${context.printList(value.params)})${printOptionalReturnType(value, context)} ${context.print(value.body)}`;
   }
-  const type = printOptionalTypeAnnotation(node, context);
+  const type =
+    "typeAnnotation" in node ? printOptionalTypeAnnotation(node, context) : "";
   return `${head}${type}${value ? ` = ${context.print(value)}` : ""};`;
 }
 
@@ -585,7 +590,9 @@ function printProperty<T>(
   context: InternalContext<T>,
 ): string {
   if (node.kind === "get" || node.kind === "set") {
-    return `${node.kind} ${context.print(node.key)}() ${context.print(node.value.body)}`;
+    return isFunctionLikeValue(node.value)
+      ? `${node.kind} ${context.print(node.key)}() ${context.print(node.value.body)}`
+      : `${node.kind} ${context.print(node.key)}()`;
   }
   const key = node.computed
     ? `[${context.print(node.key)}]`
@@ -593,7 +600,9 @@ function printProperty<T>(
   const value = context.print(node.value);
   if (node.method) {
     const fn = node.value;
-    return `${key}(${context.printList(fn.params)}) ${context.print(fn.body)}`;
+    return isFunctionLikeValue(fn)
+      ? `${key}(${context.printList(fn.params)}) ${context.print(fn.body)}`
+      : `${key}()`;
   }
   if (node.shorthand && key === value) {
     return key;
@@ -619,11 +628,9 @@ function printCallExpression<T>(
 ): string {
   const callee = context.print(node.callee);
   const args = context.printList(node.arguments);
-  const typeParameters = printTypeParameters(
-    node.typeParameters ?? node.typeArguments,
-    context,
-  );
-  return `${node.type === "NewExpression" ? "new " : ""}${callee}${typeParameters}${node.optional ? "?." : ""}(${args})`;
+  const typeParameters = printTypeParameters(node.typeArguments, context);
+  const optional = node.type === "CallExpression" && node.optional ? "?." : "";
+  return `${node.type === "NewExpression" ? "new " : ""}${callee}${typeParameters}${optional}(${args})`;
 }
 
 function printTemplateLiteral<T>(
@@ -750,7 +757,7 @@ function printTypeScriptNode<T>(
     case "TSLiteralType":
       return context.print(node.literal);
     case "TSTypeReference":
-      return `${context.print(node.typeName)}${printTypeParameters(node.typeParameters ?? node.typeArguments, context)}`;
+      return `${context.print(node.typeName)}${printTypeParameters(node.typeArguments, context)}`;
     case "TSQualifiedName":
       return `${context.print(node.left)}.${context.print(node.right)}`;
     case "TSArrayType":
@@ -788,7 +795,7 @@ function printTypeScriptNode<T>(
     case "TSEnumMember":
       return `${context.print(node.id)}${node.initializer ? ` = ${context.print(node.initializer)}` : ""}`;
     case "TSDeclareFunction":
-      return `declare ${printFunction({ ...node, type: "FunctionDeclaration" }, context, true)}`;
+      return printDeclareFunction(node, context);
     default:
       throw new Error(`Unsupported TypeScript AST node: ${node.type}`);
   }
@@ -799,6 +806,16 @@ function printOptionalTypeAnnotation<T>(
   context: InternalContext<T>,
 ): string {
   return node.typeAnnotation ? context.print(node.typeAnnotation) : "";
+}
+
+function printDeclareFunction<T>(
+  node: AST.TSDeclareFunction,
+  context: InternalContext<T>,
+): string {
+  const prefix = node.declare ? "declare " : "";
+  const id = node.id ? context.print(node.id) : "";
+  const params = context.printList(node.params);
+  return `${prefix}function ${id}${printTypeParameters(node.typeParameters, context)}(${params})${printOptionalReturnType(node, context)};`;
 }
 
 function printOptionalReturnType<T>(
@@ -841,13 +858,23 @@ function printLiteral(node: AST.Literal): string {
   if (typeof node.raw === "string") {
     return node.raw;
   }
-  if (typeof node.value === "string") {
-    return JSON.stringify(node.value);
+  const literal = node as AST.Literal;
+  if (typeof literal.value === "string") {
+    return JSON.stringify(literal.value);
   }
-  if (node.value instanceof RegExp) {
-    return String(node.value);
+  if (literal.value instanceof RegExp) {
+    return String(literal.value);
   }
-  return String(node.value);
+  return String(literal.value);
+}
+
+function isFunctionLikeValue(
+  node: AST.Node,
+): node is AST.FunctionExpression | AST.TSEmptyBodyFunctionExpression {
+  return (
+    node.type === "FunctionExpression" ||
+    node.type === "TSEmptyBodyFunctionExpression"
+  );
 }
 
 function needsSemicolon(node: AST.BaseNode): boolean {

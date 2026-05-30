@@ -1,14 +1,14 @@
 import { Parser } from "acorn";
 import { describe, expect, it } from "vitest";
-import { print, type AstNode } from "../src/index.ts";
+import { print, type AST } from "../src/index.ts";
 
-function parse(source: string): AstNode {
+function parse(source: string): AST.Program {
   return Parser.parse(source, {
     ecmaVersion: "latest",
     sourceType: "module",
     locations: true,
     ranges: true,
-  }) as unknown as AstNode;
+  }) as AST.Program;
 }
 
 describe("printer", () => {
@@ -31,12 +31,13 @@ describe("printer", () => {
   it("prints touched ancestors and preserves untouched descendants", () => {
     const source = "const answer = 1;";
     const ast = parse(source);
-    const declaration = (ast.body as AstNode[])[0];
-    const declarator = (declaration.declarations as AstNode[])[0];
-    const literal = declarator.init as AstNode;
-    const touched = new WeakSet<AstNode>([ast, declaration, declarator, literal]);
+    const declaration = (ast.body)[0] as AST.VariableDeclaration;
+    const declarator = (declaration.declarations)[0];
+    const literal = declarator.init as AST.Literal;
+    const touched = new WeakSet<AST.Node>([ast, declaration, declarator, literal]);
 
     literal.value = 2;
+    // @ts-expect-error deleting non-optional properties is intentional to test that printer doesn't rely on them existing
     delete literal.raw;
 
     const result = print(ast, {
@@ -59,7 +60,7 @@ describe("printer", () => {
   it("combines adjacent untouched sibling mappings with preserved trivia", () => {
     const source = "let a = 1;\nlet b = 2;";
     const ast = parse(source);
-    const touched = new WeakSet<AstNode>([ast]);
+    const touched = new WeakSet<AST.Node>([ast]);
 
     const result = print(ast, {
       source,
@@ -81,8 +82,8 @@ describe("printer", () => {
   it("allows callers to override node printing and mapping data", () => {
     const source = "foo();";
     const ast = parse(source);
-    const statement = (ast.body as AstNode[])[0];
-    const touched = new WeakSet<AstNode>([ast, statement]);
+    const statement = (ast.body)[0];
+    const touched = new WeakSet<AST.Node>([ast, statement]);
 
     const result = print(ast, {
       source,
@@ -91,7 +92,7 @@ describe("printer", () => {
       isUntouched: (node) => !touched.has(node),
       printNode: (node, context, next) => {
         if (node.type === "ExpressionStatement") {
-          return `await ${context.print(node.expression as AstNode)};`;
+          return `await ${context.print(node.expression)};`;
         }
         return next();
       },

@@ -3,11 +3,9 @@
   "compilerOptions": {
     "types": [
       "node",
-      "vitest/globals"
     ],
   },
   "include": [
-    "test",
     "tsdown.config.ts"
   ],
 }
