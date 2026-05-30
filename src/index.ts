@@ -1,7 +1,6 @@
 export {
   createPrinter,
   print,
-  type AstNode,
   type MappingFactory,
   type PrintContext,
   type PrintOptions,
