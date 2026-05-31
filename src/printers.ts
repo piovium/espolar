@@ -1,7 +1,7 @@
 import type { PrinterContext, Printers } from "./api.ts";
 import type { AST } from "./types.ts";
 
-export const defaultPrinters: Printers = {
+export const defaultPrinters: Printers<unknown> = {
   Program: printProgram,
   Identifier: printIdentifier,
   PrivateIdentifier: printPrivateIdentifier,

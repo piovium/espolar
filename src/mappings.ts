@@ -1,15 +1,18 @@
 import type { Mapping } from "@volar/source-map";
 import type { AST } from "./types.ts";
 
+export interface InternalMapping<Data = unknown> {
+  sourceStart: number;
+  sourceEnd: number;
+  generatedStart: number;
+  generatedEnd: number;
+  data: Data;
+}
+
 export interface SourceRange {
   start: number;
   end: number;
 }
-
-type NodeWithOffsets = AST.Node & {
-  start?: number;
-  end?: number;
-};
 
 export function getNodeRange(node: AST.Node): SourceRange | undefined {
   if (Array.isArray(node.range) && node.range.length === 2) {
@@ -18,16 +21,13 @@ export function getNodeRange(node: AST.Node): SourceRange | undefined {
       return { start, end };
     }
   }
-
-  const nodeWithOffsets = node as NodeWithOffsets;
-  const start = nodeWithOffsets.start;
-  const end = nodeWithOffsets.end;
+  const { start, end } = node;
   if (
-    typeof start === "number"
-    && typeof end === "number"
-    && Number.isInteger(start)
-    && Number.isInteger(end)
-    && start <= end
+    typeof start === "number" &&
+    typeof end === "number" &&
+    Number.isInteger(start) &&
+    Number.isInteger(end) &&
+    start <= end
   ) {
     return {
       start,
@@ -38,18 +38,15 @@ export function getNodeRange(node: AST.Node): SourceRange | undefined {
   return undefined;
 }
 
-export function canUseDefaultPreservation(node: AST.Node): boolean {
-  return getNodeRange(node) !== undefined;
-}
-
 export function pushMapping<Data>(
-  mappings: Mapping<Data>[],
-  mapping: Mapping<Data>,
+  mappings: InternalMapping<Data>[],
+  mapping: InternalMapping<Data>,
   combineMappingData: (left: Data, right: Data) => Data,
 ): void {
   const previous = mappings.at(-1);
   if (previous && canMerge(previous, mapping)) {
-    previous.lengths[0] += mapping.lengths[0];
+    previous.sourceEnd = mapping.sourceEnd;
+    previous.generatedEnd = mapping.generatedEnd;
     previous.data = combineMappingData(previous.data, mapping.data);
     return;
   }
@@ -57,46 +54,27 @@ export function pushMapping<Data>(
   mappings.push(mapping);
 }
 
-export function extendLastMapping<Data>(
-  mappings: Mapping<Data>[],
-  sourceStart: number,
-  sourceEnd: number,
-  generatedStart: number,
-  generatedEnd: number,
+function canMerge<Data>(
+  left: InternalMapping<Data>,
+  right: InternalMapping<Data>,
 ): boolean {
-  const previous = mappings.at(-1);
-  if (!previous) {
-    return false;
-  }
-
-  const length = sourceEnd - sourceStart;
-  if (
-    previous.sourceOffsets.length === 1
-    && previous.generatedOffsets.length === 1
-    && previous.lengths.length === 1
-    && previous.generatedLengths === undefined
-    && length === generatedEnd - generatedStart
-    && previous.sourceOffsets[0] + previous.lengths[0] === sourceStart
-    && previous.generatedOffsets[0] + previous.lengths[0] === generatedStart
-  ) {
-    previous.lengths[0] += length;
-    return true;
-  }
-
-  return false;
+  return (
+    left.sourceStart + left.sourceEnd === right.sourceStart &&
+    left.generatedStart + left.generatedEnd === right.generatedStart
+  );
 }
 
-function canMerge<Data>(left: Mapping<Data>, right: Mapping<Data>): boolean {
-  return (
-    left.sourceOffsets.length === 1
-    && left.generatedOffsets.length === 1
-    && left.lengths.length === 1
-    && right.sourceOffsets.length === 1
-    && right.generatedOffsets.length === 1
-    && right.lengths.length === 1
-    && left.generatedLengths === undefined
-    && right.generatedLengths === undefined
-    && left.sourceOffsets[0] + left.lengths[0] === right.sourceOffsets[0]
-    && left.generatedOffsets[0] + left.lengths[0] === right.generatedOffsets[0]
-  );
+export function toVolarMapping<Data>(
+  mapping: InternalMapping<Data>,
+): Mapping<Data> {
+  const sourceLength = mapping.sourceEnd - mapping.sourceStart;
+  const generatedLength = mapping.generatedEnd - mapping.generatedStart;
+  return {
+    sourceOffsets: [mapping.sourceStart],
+    generatedOffsets: [mapping.generatedStart],
+    lengths: [sourceLength],
+    generatedLengths:
+      generatedLength !== sourceLength ? [generatedLength] : undefined,
+    data: mapping.data,
+  };
 }

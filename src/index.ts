@@ -5,7 +5,6 @@ export {
   print,
 } from "./printer.ts";
 export type {
-  NodeMappingData,
   NodePrinter,
   PrintOptions,
   PrintResult,

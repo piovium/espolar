@@ -1,7 +1,7 @@
 import { Parser } from "acorn";
 import { tsPlugin } from "@sveltejs/acorn-typescript";
 import { describe, expect, it } from "vitest";
-import { print, type NodeMappingData } from "../src/index.ts";
+import { print } from "../src/index.ts";
 import type { AST } from "../src/types.ts";
 
 const TsParser = Parser.extend(tsPlugin());
@@ -35,31 +35,35 @@ describe("print", () => {
 
     const result = print(ast, {
       source,
-      isUntouched: node => node.type !== "Program",
+      isUntouched: (node) => node.type !== "Program",
     });
 
     expect(result.code).toBe(source);
+    console.log(result.mappings);
     expect(result.mappings).toHaveLength(1);
     expect(result.mappings[0].sourceOffsets).toEqual([0]);
     expect(result.mappings[0].generatedOffsets).toEqual([0]);
     expect(result.mappings[0].lengths).toEqual([source.length]);
-    expect((result.mappings[0].data as NodeMappingData).nodeTypes).toEqual([
-      "VariableDeclaration",
-      "VariableDeclaration",
-    ]);
   });
 
-  it("structurally prints touched JavaScript nodes", () => {
+  it("structurally prints touched JavaScript nodes with leaf node mappings", () => {
     const source = "const total = add(1, 2);";
     const ast = parse(source);
 
-    const result = print(ast, {
+    const result = print<string | undefined>(ast, {
       source,
       isUntouched: () => false,
+      getMappingData: (node) => node?.type,
     });
 
     expect(result.code).toBe("const total = add(1, 2);");
-    expect(result.mappings).toHaveLength(0);
+    expect(result.mappings).toHaveLength(4);
+    expect(result.mappings.map((mapping) => mapping.data)).toEqual([
+      "Identifier",
+      "Identifier",
+      "Literal",
+      "Literal",
+    ]);
   });
 
   it("structurally prints basic TypeScript syntax", () => {
@@ -75,11 +79,13 @@ describe("print", () => {
       isUntouched: () => false,
     });
 
-    expect(result.code).toBe([
-      "type Box<T> = { value: T; };",
-      "interface Named { readonly name?: string; }",
-      "const value: Box<number> = item satisfies Box<number>;",
-    ].join("\n"));
+    expect(result.code).toBe(
+      [
+        "type Box<T> = { value: T; };",
+        "interface Named { readonly name?: string; }",
+        "const value: Box<number> = item satisfies Box<number>;",
+      ].join("\n"),
+    );
   });
 
   it("structurally prints functions, blocks, members, and arrows", () => {
@@ -95,15 +101,18 @@ describe("print", () => {
       isUntouched: () => false,
     });
 
-    expect(result.code).toBe([
-      "async function* load<T>(items: T[]): Promise<T> {\nreturn items[0]!;\n}",
-      "const fn = async (value: number): number => value + 1;",
-      "function collect(...items: string[]) {}",
-    ].join("\n"));
+    expect(result.code).toBe(
+      [
+        "async function* load<T>(items: T[]): Promise<T> {\nreturn items[0]!;\n}",
+        "const fn = async (value: number): number => value + 1;",
+        "function collect(...items: string[]) {}",
+      ].join("\n"),
+    );
   });
 
   it("structurally prints object, array, spread, chain, and computed properties", () => {
-    const source = "const data = { value, [key]: get?.(1), nested: { a: 1 }, list: [first, ...rest] };";
+    const source =
+      "const data = { value, [key]: get?.(1), nested: { a: 1 }, list: [first, ...rest] };";
     const ast = parse(source);
 
     const result = print(ast, {
@@ -111,12 +120,14 @@ describe("print", () => {
       isUntouched: () => false,
     });
 
-    expect(result.code).toBe("const data = { value, [key]: get?.(1), nested: { a: 1 }, list: [first, ...rest] };");
+    expect(result.code).toBe(
+      "const data = { value, [key]: get?.(1), nested: { a: 1 }, list: [first, ...rest] };",
+    );
   });
 
   it("structurally prints richer TypeScript declarations", () => {
     const source = [
-      "type Mixed<T extends string = \"x\"> = string | number & boolean;",
+      'type Mixed<T extends string = "x"> = string | number & boolean;',
       "interface Child extends Parent<string> { [key]?: number; }",
       "type Qualified = Namespace.Name;",
     ].join("\n");
@@ -127,11 +138,13 @@ describe("print", () => {
       isUntouched: () => false,
     });
 
-    expect(result.code).toBe([
-      "type Mixed<T extends string = \"x\"> = string | number & boolean;",
-      "interface Child extends Parent<string> { [key]?: number; }",
-      "type Qualified = Namespace.Name;",
-    ].join("\n"));
+    expect(result.code).toBe(
+      [
+        'type Mixed<T extends string = "x"> = string | number & boolean;',
+        "interface Child extends Parent<string> { [key]?: number; }",
+        "type Qualified = Namespace.Name;",
+      ].join("\n"),
+    );
   });
 
   it("prints small generated nodes without source ranges", () => {
@@ -168,15 +181,17 @@ describe("print", () => {
   });
 
   it("reports unsupported touched nodes", () => {
-    expect(() => print(
-      {
-        type: "NotImplemented",
-      } as unknown as AST.Node,
-      {
-        source: "",
-        isUntouched: () => false,
-      },
-    )).toThrow("No printer registered for node type NotImplemented");
+    expect(() =>
+      print(
+        {
+          type: "NotImplemented",
+        } as unknown as AST.Node,
+        {
+          source: "",
+          isUntouched: () => false,
+        },
+      ),
+    ).toThrow("No printer registered for node type NotImplemented");
   });
 
   it("lets custom printers use low-level context helpers", () => {
@@ -203,8 +218,11 @@ describe("print", () => {
         Program: (_node, context) => {
           context.write("");
           context.writeNode(null);
-          context.writeNodeListWithSourceGaps((program as AST.Program).body, "\n");
-          context.writeSourceGap(0, 0);
+          context.writeNodeListWithSourceGaps(
+            (program as AST.Program).body,
+            "\n",
+          );
+          context.writeSource(0, 0, null);
           context.write("|");
           context.writeNodeList([literal, null, literal], ",");
         },
@@ -218,15 +236,18 @@ describe("print", () => {
     const source = "const a = 1;\nconst b = 2;";
     const ast = parse(source);
 
-    const result = print<string>(ast, {
+    const result = print<string | null>(ast, {
       source,
-      isUntouched: node => node.type !== "Program",
-      getMappingData: node => node.type,
-      combineMappingData: (left, right) => `${left}+${right}`,
+      isUntouched: (node) => node.type !== "Program",
+      getMappingData: (node) => node?.type || null,
+      combineMappingData: (left, right) =>
+        right === null ? left : `${left}+${right}`,
     });
 
     expect(result.mappings).toHaveLength(1);
-    expect(result.mappings[0].data).toBe("VariableDeclaration+VariableDeclaration");
+    expect(result.mappings[0].data).toBe(
+      "VariableDeclaration+VariableDeclaration",
+    );
   });
 
   it("supports custom untouched detection", () => {
@@ -236,15 +257,14 @@ describe("print", () => {
 
     const result = print(ast, {
       source,
-      isUntouched: node => (
-        node !== ast
-        && node !== regenerated
-        && node.type !== "VariableDeclarator"
-      ),
+      isUntouched: (node) =>
+        node !== ast &&
+        node !== regenerated &&
+        node.type !== "VariableDeclarator",
     });
 
     expect(result.code).toBe(source);
-    expect(result.mappings.map(mapping => mapping.lengths[0])).toEqual([
+    expect(result.mappings.map((mapping) => mapping.lengths[0])).toEqual([
       "const untouched = 1;\n".length,
       "regenerated".length,
       "2".length,
@@ -256,10 +276,11 @@ describe("print", () => {
     const ast = parse(source);
     const declaration = ast.body[0] as AST.VariableDeclaration;
 
-    const result = print<string>(declaration, {
+    const result = print<string | null>(declaration, {
       source,
-      getMappingData: node => node.type,
-      isUntouched: node => node !== declaration && node.type !== "VariableDeclarator",
+      getMappingData: (node) => node?.type || null,
+      isUntouched: (node) =>
+        node !== declaration && node.type !== "VariableDeclarator",
       printers: {
         VariableDeclaration: (node, context) => {
           const variable = node as AST.VariableDeclaration;
@@ -271,7 +292,7 @@ describe("print", () => {
     });
 
     expect(result.code).toBe("let value = 1;");
-    expect(result.mappings.map(mapping => mapping.data)).toEqual([
+    expect(result.mappings.map((mapping) => mapping.data)).toEqual([
       "Identifier",
       "Literal",
     ]);

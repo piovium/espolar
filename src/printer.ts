@@ -1,6 +1,5 @@
 import type { Mapping } from "@volar/source-map";
 import type {
-  NodeMappingData,
   NodePrinter,
   PrintOptions,
   PrintResult,
@@ -10,17 +9,18 @@ import type {
 import { defaultPrinters } from "./printers.ts";
 import type { AST, AST_NODE_TYPES } from "./types.ts";
 import {
-  canUseDefaultPreservation,
-  extendLastMapping,
   getNodeRange,
   pushMapping,
+  toVolarMapping,
+  type InternalMapping,
+  type SourceRange,
 } from "./mappings.ts";
 
 interface InternalPrinterContext<Data> extends PrinterContext<Data> {
   result(): PrintResult<Data>;
 }
 
-export function print<Data = NodeMappingData>(
+export function print<Data>(
   node: AST.Node,
   options: PrintOptions<Data>,
 ): PrintResult<Data> {
@@ -29,49 +29,59 @@ export function print<Data = NodeMappingData>(
   return context.result();
 }
 
-export function defaultIsUntouched(node: AST.Node): boolean {
-  return canUseDefaultPreservation(node);
+export function defaultIsUntouched(node: AST.Node): boolean | SourceRange {
+  return getNodeRange(node) || false;
 }
 
-export function defaultGetMappingData(node: AST.Node): NodeMappingData {
-  return {
-    nodeTypes: [node.type],
-    nodes: [node],
-  };
+export function defaultGetMappingData(node?: AST.Node | null): unknown {
+  return {};
 }
 
 export function defaultCombineMappingData(
-  left: NodeMappingData,
-  right: NodeMappingData,
-): NodeMappingData {
-  return {
-    nodeTypes: [...left.nodeTypes, ...right.nodeTypes],
-    nodes: [...left.nodes, ...right.nodes],
-  };
+  left: unknown,
+  right: unknown,
+): unknown {
+  return right;
 }
 
 function createPrinterContext<Data>(
   options: PrintOptions<Data>,
 ): InternalPrinterContext<Data> {
   const chunks: string[] = [];
-  const mappings: Mapping<Data>[] = [];
+  const mappings: InternalMapping<Data>[] = [];
   let generatedOffset = 0;
 
   const isUntouched = options.isUntouched ?? defaultIsUntouched;
   const getMappingData =
     options.getMappingData ??
-    (defaultGetMappingData as (node: AST.Node) => Data);
+    (defaultGetMappingData as (node?: AST.Node | null) => Data);
   const combineMappingData =
     options.combineMappingData ??
     (options.getMappingData
       ? (left: Data) => left
-      : (defaultCombineMappingData as unknown as (
-          left: Data,
-          right: Data,
-        ) => Data));
+      : (defaultCombineMappingData as (left: Data, right: Data) => Data));
   const printers: Printers<Data> = {
     ...defaultPrinters,
     ...options.printers,
+  };
+
+  const appendMapping = (
+    sourceRange: SourceRange,
+    generatedStart: number,
+    generatedEnd: number,
+    data: Data,
+  ) => {
+    pushMapping(
+      mappings,
+      {
+        sourceStart: sourceRange.start,
+        sourceEnd: sourceRange.end,
+        generatedStart,
+        generatedEnd,
+        data,
+      },
+      combineMappingData,
+    );
   };
 
   const context: InternalPrinterContext<Data> = {
@@ -91,12 +101,21 @@ function createPrinterContext<Data>(
         return;
       }
 
-      if (isUntouched(node)) {
-        const range = getNodeRange(node);
-        if (range) {
-          context.writePreservedNode(node);
-          return;
+      const range = getNodeRange(node);
+      const untouchedRet = isUntouched(node);
+      if (untouchedRet) {
+        const sourceRange = untouchedRet === true ? range : untouchedRet;
+        if (!sourceRange) {
+          throw new Error(
+            `Node of type ${node.type} is marked as untouched but does not have valid source offsets`,
+          );
         }
+        context.writeSource(
+          sourceRange.start,
+          sourceRange.end,
+          getMappingData(node),
+        );
+        return;
       }
 
       const printer = printers[node.type] as
@@ -106,7 +125,20 @@ function createPrinterContext<Data>(
         throw new Error(`No printer registered for node type ${node.type}`);
       }
 
+      const generatedStart = generatedOffset;
       printer(node, context);
+      const generatedEnd = generatedOffset;
+      // If children nodes don't emit any mapping but the parent node itself
+      // can produce mapping, add that mapping
+      const lastMappingGeneratedEnd = mappings.at(-1)?.generatedEnd ?? 0;
+      if (range && lastMappingGeneratedEnd <= generatedStart) {
+        appendMapping(
+          range,
+          generatedStart,
+          generatedEnd,
+          getMappingData(node),
+        );
+      }
     },
     writeNodeList(nodes, separator) {
       let needsSeparator = false;
@@ -141,7 +173,11 @@ function createPrinterContext<Data>(
             range &&
             range.start >= lastRangeEnd
           ) {
-            context.writeSourceGap(lastRangeEnd, range.start);
+            context.writeSource(
+              lastRangeEnd,
+              range.start,
+              getMappingData(null),
+            );
           } else {
             context.write(fallbackSeparator);
           }
@@ -164,35 +200,21 @@ function createPrinterContext<Data>(
           `Cannot preserve node ${node.type} without source offsets`,
         );
       }
-
-      const generatedStart = generatedOffset;
-      const text = options.source.slice(range.start, range.end);
-      context.write(text);
-
-      pushMapping(
-        mappings,
-        {
-          sourceOffsets: [range.start],
-          generatedOffsets: [generatedStart],
-          lengths: [range.end - range.start],
-          data: getMappingData(node),
-        },
-        combineMappingData,
-      );
+      context.writeSource(range.start, range.end, getMappingData(node));
     },
-    writeSourceGap(start, end) {
+    writeSource(start, end, data) {
       if (end <= start) {
         return;
       }
 
       const generatedStart = generatedOffset;
       context.write(options.source.slice(start, end));
-      extendLastMapping(mappings, start, end, generatedStart, generatedOffset);
+      appendMapping({ start, end }, generatedStart, generatedOffset, data);
     },
     result() {
       return {
         code: chunks.join(""),
-        mappings,
+        mappings: mappings.map(toVolarMapping),
       };
     },
   };

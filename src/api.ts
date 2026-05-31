@@ -1,25 +1,21 @@
 import type { Mapping } from "@volar/source-map";
 import type { AST, AST_NODE_TYPES } from "./types.ts";
+import type { SourceRange } from "./mappings.ts";
 
-export interface NodeMappingData {
-  nodeTypes: string[];
-  nodes: AST.Node[];
-}
-
-export interface PrintResult<Data = NodeMappingData> {
+export interface PrintResult<Data> {
   code: string;
   mappings: Mapping<Data>[];
 }
 
-export interface PrintOptions<Data = NodeMappingData> {
+export interface PrintOptions<Data> {
   source: string;
-  isUntouched?: (node: AST.Node) => boolean;
-  getMappingData?: (node: AST.Node) => Data;
+  isUntouched?: (node: AST.Node) => boolean | SourceRange;
+  getMappingData?: (node?: AST.Node | null) => Data;
   combineMappingData?: (left: Data, right: Data) => Data;
   printers?: Printers<Data>;
 }
 
-export interface PrinterContext<Data = NodeMappingData> {
+export interface PrinterContext<Data> {
   readonly source: string;
   readonly generatedOffset: number;
   write(text: string): void;
@@ -33,14 +29,14 @@ export interface PrinterContext<Data = NodeMappingData> {
     fallbackSeparator: string,
   ): void;
   writePreservedNode(node: AST.Node): void;
-  writeSourceGap(start: number, end: number): void;
+  writeSource(start: number, end: number, data: Data): void;
 }
 
-export type NodePrinter<Key extends AST_NODE_TYPES, Data = NodeMappingData> = (
+export type NodePrinter<Key extends AST_NODE_TYPES, Data> = (
   node: Extract<AST.Node, { type: Key }>,
   context: PrinterContext<Data>,
 ) => void;
 
-export type Printers<Data = NodeMappingData> = {
+export type Printers<Data> = {
   [K in AST_NODE_TYPES]?: NodePrinter<K, Data>;
 };
