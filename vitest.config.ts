@@ -14,5 +14,8 @@ export default defineConfig({
         statements: 80,
       },
     },
+    experimental: {
+      viteModuleRunner: false,
+    },
   },
 });

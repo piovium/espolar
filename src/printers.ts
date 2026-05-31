@@ -31,11 +31,13 @@ export const defaultPrinters: Printers<unknown> = {
   TSTypeAnnotation: printTSTypeAnnotation,
   TSTypeAliasDeclaration: printTSTypeAliasDeclaration,
   TSInterfaceDeclaration: printTSInterfaceDeclaration,
-  // TODO: investigate this
   // @ts-expect-error TSESTree do not have this entry
+  // https://github.com/sveltejs/acorn-typescript/issues/7#issuecomment-3237280163
   TSExpressionWithTypeArguments: printTSExpressionWithTypeArguments,
   TSClassImplements: printTSExpressionWithTypeArguments,
   TSInterfaceHeritage: printTSExpressionWithTypeArguments,
+  TSFunctionType: printTSFunctionType,
+  TSMethodSignature: printTSMethodSignature,
   TSInterfaceBody: printTSInterfaceBody,
   TSPropertySignature: printTSPropertySignature,
   TSTypeParameterDeclaration: printTypeParameterDeclaration,
@@ -481,6 +483,8 @@ function printTSTypeParameter(
   if (parameter.out === true) {
     context.write("out ");
   }
+  // https://github.com/sveltejs/acorn-typescript/issues/7
+  // parameter.name might be a string instead of an Identifier node
   if (typeof parameter.name === "string") {
     context.write(parameter.name);
   } else {
@@ -494,6 +498,62 @@ function printTSTypeParameter(
     context.write(" = ");
     context.writeNode(parameter.default);
   }
+}
+
+function printTSFunctionType(
+  type: AST.TSFunctionType,
+  context: PrinterContext<unknown>,
+): void {
+  if (type.typeParameters) {
+    context.writeNode(type.typeParameters);
+  } else if (type.typeAnnotation) {
+    context.writeNode(type.typeAnnotation.typeAnnotation);
+  }
+  context.write("(");
+  if (type.params) {
+    context.writeNodeList(type.params, ", ");
+  } else if (type.parameters) {
+    context.writeNodeList(type.parameters, ", ");
+  }
+  context.write(")");
+  if (type.returnType) {
+    context.writeNode(type.returnType);
+  }
+}
+
+function printTSMethodSignature(
+  signature: AST.TSMethodSignature,
+  context: PrinterContext<unknown>,
+): void {
+  if (signature.readonly === true) {
+    context.write("readonly ");
+  }
+  if (signature.computed === true) {
+    context.write("[");
+    context.writeNode(signature.key);
+    context.write("]");
+  } else {
+    context.writeNode(signature.key);
+  }
+  if (signature.optional === true) {
+    context.write("?");
+  }
+  if (signature.typeParameters) {
+    context.writeNode(signature.typeParameters);
+  } else if (signature.typeAnnotation) {
+    context.writeNode(signature.typeAnnotation.typeAnnotation);
+  }
+  context.write("(");
+  if (signature.params) {
+    context.writeNodeList(signature.params, ", ");
+  } else if (signature.parameters) {
+    context.writeNodeList(signature.parameters, ", ");
+  }
+  context.write(")");
+  if (signature.typeAnnotation) {
+    context.writeNode(signature.typeAnnotation);
+  }
+  context.write(";");
 }
 
 function printTSTypeReference(

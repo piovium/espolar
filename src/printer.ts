@@ -1,4 +1,3 @@
-import type { Mapping } from "@volar/source-map";
 import type {
   NodePrinter,
   PrintOptions,

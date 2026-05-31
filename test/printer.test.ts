@@ -39,7 +39,6 @@ describe("print", () => {
     });
 
     expect(result.code).toBe(source);
-    console.log(result.mappings);
     expect(result.mappings).toHaveLength(1);
     expect(result.mappings[0].sourceOffsets).toEqual([0]);
     expect(result.mappings[0].generatedOffsets).toEqual([0]);
