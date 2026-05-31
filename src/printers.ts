@@ -149,18 +149,6 @@ function arrowConciseBodyNeedsWrap(
   }
 }
 
-type FuncLike = {
-  async?: boolean;
-  generator?: boolean;
-  id?: AST.Identifier | null;
-  typeParameters?: AST.TSTypeParameterDeclaration | null;
-  params: AST.Parameter[];
-  parameters?: AST.Parameter[];
-  returnType?: AST.TSTypeAnnotation | null;
-  typeAnnotation?: AST.TSTypeAnnotation | null;
-  body?: AST.BlockStatement | AST.Expression | null;
-};
-
 // Printers
 export const defaultPrinters: Printers<unknown> = {
   Program: printProgram,
@@ -311,9 +299,7 @@ export const defaultPrinters: Printers<unknown> = {
   TSIntrinsicKeyword: printKeywordType,
 };
 
-/* =============================================================================
-   JS – Statements
-   ============================================================================= */
+// JS – Statements
 
 function printProgram(
   program: AST.Program,
@@ -619,9 +605,7 @@ function printWithStatement(
   context.writeNode(statement.body);
 }
 
-/* =============================================================================
-   JS – Expressions
-   ============================================================================= */
+// JS – Expressions
 
 function printIdentifier(
   identifier: AST.Identifier,
@@ -1034,9 +1018,7 @@ function printParenthesizedExpression(
   context.write(")");
 }
 
-/* =============================================================================
-   JS – Functions / Classes
-   ============================================================================= */
+// JS – Functions / Classes
 
 function printFunctionDeclaration(
   node: AST.FunctionDeclaration,
@@ -1123,6 +1105,11 @@ function printClass(
   node: AST.ClassDeclaration | AST.ClassExpression,
   context: PrinterContext<unknown>,
 ): void {
+  if (node.decorators) {
+    for (const d of node.decorators) {
+      context.writeNode(d);
+    }
+  }
   if (node.declare === true) {
     context.write("declare ");
   }
@@ -1203,6 +1190,12 @@ function printPropertyDefinition(
       context.writeNode(d);
     }
   }
+  if (
+    node.type === "TSAbstractPropertyDefinition" ||
+    ("abstract" in node && node.abstract === true)
+  ) {
+    context.write("abstract ");
+  }
   if (node.accessibility) {
     context.write(node.accessibility + " ");
   }
@@ -1214,12 +1207,6 @@ function printPropertyDefinition(
   }
   if (node.readonly === true) {
     context.write("readonly ");
-  }
-  if (
-    node.type === "TSAbstractPropertyDefinition" ||
-    ("abstract" in node && node.abstract === true)
-  ) {
-    context.write("abstract ");
   }
   if (
     node.type === "AccessorProperty" ||
@@ -1305,9 +1292,7 @@ function printMethodDefinition(
   }
 }
 
-/* =============================================================================
-   JS – Imports / Exports
-   ============================================================================= */
+// JS – Imports / Exports
 
 function printImportDeclaration(
   node: AST.ImportDeclaration,
@@ -1405,20 +1390,28 @@ function printExportNamedDeclaration(
   context: PrinterContext<unknown>,
 ): void {
   if (node.declaration) {
+    let decl = node.declaration;
+    if ("decorators" in decl && decl.decorators && decl.decorators.length > 0) {
+      const { decorators, ...rest } = decl;
+      for (const d of decorators) {
+        context.writeNode(d);
+      }
+      decl = rest as typeof decl;
+    }
     context.write("export ");
     if (node.exportKind === "type") {
       context.write("type ");
     }
-    context.writeNode(node.declaration);
+    context.writeNode(decl);
     if (
-      node.declaration.type !== "FunctionDeclaration" &&
-      node.declaration.type !== "ClassDeclaration" &&
-      node.declaration.type !== "TSModuleDeclaration" &&
-      node.declaration.type !== "TSEnumDeclaration" &&
-      node.declaration.type !== "TSTypeAliasDeclaration" &&
-      node.declaration.type !== "TSInterfaceDeclaration" &&
-      node.declaration.type !== "VariableDeclaration" &&
-      node.declaration.type !== "TSDeclareFunction"
+      decl.type !== "FunctionDeclaration" &&
+      decl.type !== "ClassDeclaration" &&
+      decl.type !== "TSModuleDeclaration" &&
+      decl.type !== "TSEnumDeclaration" &&
+      decl.type !== "TSTypeAliasDeclaration" &&
+      decl.type !== "TSInterfaceDeclaration" &&
+      decl.type !== "VariableDeclaration" &&
+      decl.type !== "TSDeclareFunction"
     ) {
       context.write(";");
     }
@@ -1444,11 +1437,23 @@ function printExportDefaultDeclaration(
   node: AST.ExportDefaultDeclaration,
   context: PrinterContext<unknown>,
 ): void {
+  let decl = node.declaration;
+  if ("decorators" in decl && decl.decorators && decl.decorators.length > 0) {
+    for (const d of decl.decorators) {
+      context.writeNode(d);
+    }
+    const { decorators: _, ...rest } = decl as unknown as Record<
+      string,
+      unknown
+    >;
+    decl = rest as unknown as typeof decl;
+  }
   context.write("export default ");
-  context.writeNode(node.declaration);
+  context.writeNode(decl);
   if (
-    node.declaration.type !== "FunctionDeclaration" &&
-    node.declaration.type !== "ClassDeclaration"
+    decl.type !== "FunctionDeclaration" &&
+    decl.type !== "ClassDeclaration" &&
+    decl.type !== "ClassExpression"
   ) {
     context.write(";");
   }
@@ -1487,9 +1492,7 @@ function printExportSpecifier(
   }
 }
 
-/* =============================================================================
-   TypeScript – Expressions
-   ============================================================================= */
+// TS – Expressions
 
 function printTSAsExpression(
   expression: AST.TSAsExpression,
@@ -2219,10 +2222,6 @@ function printKeywordType(
   const keyword = node.type.slice(2, -"Keyword".length).toLowerCase();
   context.write(keyword);
 }
-
-/* =============================================================================
-   Shared helpers
-   ============================================================================= */
 
 function writeOptionalTypeAnnotation(
   node: { optional?: boolean; typeAnnotation?: AST.Node | null },

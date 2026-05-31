@@ -67,7 +67,7 @@ describe("print", () => {
 
   it("structurally prints basic TypeScript syntax", () => {
     const source = [
-      "type Box<T> = { value: T };",
+      "type Box<T> = { value: T; foo: null };",
       "interface Named { readonly name?: string; }",
       "const value: Box<number> = item satisfies Box<number>;",
     ].join("\n");
@@ -80,7 +80,7 @@ describe("print", () => {
 
     expect(result.code).toBe(
       [
-        "type Box<T> = { value: T; };",
+        "type Box<T> = { value: T; foo: null; };",
         "interface Named { readonly name?: string; }",
         "const value: Box<number> = item satisfies Box<number>;",
       ].join("\n"),
@@ -208,7 +208,7 @@ describe("print", () => {
           value: 2,
         },
       ],
-    } as AST.Node;
+    } as AST.Program;
 
     const result = print(program, {
       source: "",
@@ -217,10 +217,7 @@ describe("print", () => {
         Program: (_node, context) => {
           context.write("");
           context.writeNode(null);
-          context.writeNodeListWithSourceGaps(
-            (program as AST.Program).body,
-            "\n",
-          );
+          context.writeNodeListWithSourceGaps(program.body, "\n");
           context.writeSource(0, 0, null);
           context.write("|");
           context.writeNodeList([literal, null, literal], ",");
@@ -589,7 +586,8 @@ describe("print", () => {
   });
 
   it("structurally prints TS index, call, construct signatures", () => {
-    const source = "interface I { [key: string]: number; (x: number): string; new (x: number): I; }";
+    const source =
+      "interface I { [key: string]: number; (x: number): string; new (x: number): I; }";
     const ast = parse(source);
     const result = print(ast, {
       source,
@@ -682,11 +680,9 @@ describe("print", () => {
       isUntouched: () => false,
     });
     expect(result.code).toBe(
-      [
-        "class C {",
-        "constructor(public readonly x: number) {}",
-        "}",
-      ].join("\n"),
+      ["class C {", "constructor(public readonly x: number) {}", "}"].join(
+        "\n",
+      ),
     );
   });
 
@@ -720,7 +716,9 @@ describe("print", () => {
       source,
       isUntouched: () => false,
     });
-    expect(result.code).toBe("const x = (a ?? b) && c; const y = (a ** b) ** c;");
+    expect(result.code).toBe(
+      "const x = (a ?? b) && c; const y = (a ** b) ** c;",
+    );
   });
 
   it("structurally prints as/satisfies/non-null expression precedence", () => {
@@ -756,12 +754,7 @@ describe("print", () => {
       isUntouched: () => false,
     });
     expect(result.code).toBe(
-      [
-        "class C {",
-        "@dec",
-        "x: boolean = true;",
-        "}",
-      ].join("\n"),
+      ["class C {", "@dec", "x: boolean = true;", "}"].join("\n"),
     );
   });
 
@@ -774,10 +767,18 @@ describe("print", () => {
       id: { type: "Identifier", name: "f" },
       typeParameters: {
         type: "TSTypeParameterDeclaration",
-        params: [{ type: "TSTypeParameter", name: "T", constraint: null, default: null }],
+        params: [
+          {
+            type: "TSTypeParameter",
+            name: "T",
+            constraint: null,
+            default: null,
+          },
+        ],
       },
       params: [],
       returnType: null,
+      declare: true,
     } as unknown as AST.Node;
     const result = print(node, {
       source: "",
@@ -789,14 +790,16 @@ describe("print", () => {
   it("structurally prints TSExternalModuleReference manually", () => {
     const program = {
       type: "Program",
-      body: [{
-        type: "TSImportEqualsDeclaration",
-        id: { type: "Identifier", name: "X" },
-        moduleReference: {
-          type: "TSExternalModuleReference",
-          expression: { type: "Literal", value: "mod", raw: "'mod'" },
+      body: [
+        {
+          type: "TSImportEqualsDeclaration",
+          id: { type: "Identifier", name: "X" },
+          moduleReference: {
+            type: "TSExternalModuleReference",
+            expression: { type: "Literal", value: "mod", raw: "'mod'" },
+          },
         },
-      }],
+      ],
     } as unknown as AST.Node;
     const result = print(program, {
       source: "",
@@ -828,7 +831,12 @@ describe("print", () => {
         expression: { type: "Identifier", name: "Foo" },
         typeArguments: {
           type: "TSTypeParameterInstantiation",
-          params: [{ type: "TSTypeReference", typeName: { type: "Identifier", name: "Bar" } }],
+          params: [
+            {
+              type: "TSTypeReference",
+              typeName: { type: "Identifier", name: "Bar" },
+            },
+          ],
         },
       } as unknown as AST.Node,
       {
@@ -841,7 +849,10 @@ describe("print", () => {
     const result2 = print(
       {
         type: "TSParenthesizedType",
-        typeAnnotation: { type: "TSUnionType", types: [{ type: "TSStringKeyword" }, { type: "TSNumberKeyword" }] },
+        typeAnnotation: {
+          type: "TSUnionType",
+          types: [{ type: "TSStringKeyword" }, { type: "TSNumberKeyword" }],
+        },
       } as unknown as AST.Node,
       {
         source: "",
@@ -868,24 +879,109 @@ describe("print", () => {
       source,
       isUntouched: () => false,
     });
-    expect(result.code).toBe("function assert(cond: unknown): asserts cond is string {}");
+    expect(result.code).toBe(
+      "function assert(cond: unknown): asserts cond is string {}",
+    );
   });
 
   it("prints synthetic TSTemplateLiteralType", () => {
     const node = {
       type: "TSTemplateLiteralType",
-      quasis: [
-        { value: { raw: "prefix-" } },
-        { value: { raw: "-suffix" } },
-      ],
-      types: [
-        { type: "TSStringKeyword" },
-      ],
+      quasis: [{ value: { raw: "prefix-" } }, { value: { raw: "-suffix" } }],
+      types: [{ type: "TSStringKeyword" }],
     } as unknown as AST.Node;
     const result = print(node, {
       source: "",
       isUntouched: () => false,
     });
     expect(result.code).toBe("`prefix-${string}-suffix`");
+  });
+
+  it("structurally prints accessor property", () => {
+    const source = "class Foo { accessor x: number = 0; }";
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe(
+      ["class Foo {", "accessor x: number = 0;", "}"].join("\n"),
+    );
+  });
+
+  it("structurally prints accessor property without initializer", () => {
+    const source = "class Foo { accessor x: number; }";
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe(
+      ["class Foo {", "accessor x: number;", "}"].join("\n"),
+    );
+  });
+
+  it("structurally prints accessor property without type annotation", () => {
+    const source = "class Foo { accessor x = 0; }";
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe(
+      ["class Foo {", "accessor x = 0;", "}"].join("\n"),
+    );
+  });
+
+  it("structurally prints accessor property with decorator", () => {
+    const source = "class Foo { @dec accessor x: number = 0; }";
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe(
+      ["class Foo {", "@dec", "accessor x: number = 0;", "}"].join("\n"),
+    );
+  });
+
+  it("structurally prints decorated class declaration", () => {
+    const source = "@dec class Foo {}";
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe("@dec\nclass Foo {}");
+  });
+
+  it("structurally prints decorated class with multiple decorators", () => {
+    const source = "@dec1 @dec2 class Foo {}";
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe("@dec1\n@dec2\nclass Foo {}");
+  });
+
+  it("structurally prints exported decorated class declaration", () => {
+    const source = "@dec export class Foo {}";
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe("@dec\nexport class Foo {}");
+  });
+
+  it("structurally prints default-exported decorated class declaration", () => {
+    const source = "@dec export default class Foo {}";
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe("@dec\nexport default class Foo {}");
   });
 });
