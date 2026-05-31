@@ -1227,9 +1227,7 @@ function printPropertyDefinition(
       context.writeNode(node.typeAnnotation);
     } else {
       context.write(": ");
-      context.writeNode(
-        node.typeAnnotation.typeAnnotation ?? node.typeAnnotation,
-      );
+      context.writeNode(node.typeAnnotation.typeAnnotation);
     }
   }
   if (node.value) {
@@ -1406,11 +1404,11 @@ function printExportNamedDeclaration(
     if (
       decl.type !== "FunctionDeclaration" &&
       decl.type !== "ClassDeclaration" &&
+      decl.type !== "VariableDeclaration" &&
       decl.type !== "TSModuleDeclaration" &&
       decl.type !== "TSEnumDeclaration" &&
       decl.type !== "TSTypeAliasDeclaration" &&
       decl.type !== "TSInterfaceDeclaration" &&
-      decl.type !== "VariableDeclaration" &&
       decl.type !== "TSDeclareFunction"
     ) {
       context.write(";");
@@ -1927,9 +1925,7 @@ function printTSTypePredicate(
     context.write(" is ");
   }
   if (node.typeAnnotation) {
-    context.writeNode(
-      node.typeAnnotation.typeAnnotation ?? node.typeAnnotation,
-    );
+    context.writeNode(node.typeAnnotation.typeAnnotation);
   }
 }
 

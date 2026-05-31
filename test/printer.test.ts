@@ -16,170 +16,252 @@ function parse(source: string): AST.Program {
 }
 
 describe("print", () => {
-  it("preserves an untouched program byte-for-byte", () => {
-    const source = "const answer = 42;\n";
-    const ast = parse(source);
+  describe("untouched preservation", () => {
+    it("preserves an untouched program byte-for-byte", () => {
+      const source = "const answer = 42;\n";
+      const ast = parse(source);
 
-    const result = print(ast, { source });
+      const result = print(ast, { source });
 
-    expect(result.code).toBe(source);
-    expect(result.mappings).toHaveLength(1);
-    expect(result.mappings[0].sourceOffsets).toEqual([0]);
-    expect(result.mappings[0].generatedOffsets).toEqual([0]);
-    expect(result.mappings[0].lengths).toEqual([source.length]);
-  });
-
-  it("prints a touched parent while preserving untouched descendants and source gaps", () => {
-    const source = "const one = 1;\n\nconst two = 2;";
-    const ast = parse(source);
-
-    const result = print(ast, {
-      source,
-      isUntouched: (node) => node.type !== "Program",
+      expect(result.code).toBe(source);
+      expect(result.mappings).toHaveLength(1);
+      expect(result.mappings[0].sourceOffsets).toEqual([0]);
+      expect(result.mappings[0].generatedOffsets).toEqual([0]);
+      expect(result.mappings[0].lengths).toEqual([source.length]);
     });
 
-    expect(result.code).toBe(source);
-    expect(result.mappings).toHaveLength(1);
-    expect(result.mappings[0].sourceOffsets).toEqual([0]);
-    expect(result.mappings[0].generatedOffsets).toEqual([0]);
-    expect(result.mappings[0].lengths).toEqual([source.length]);
-  });
+    it("prints a touched parent while preserving untouched descendants and source gaps", () => {
+      const source = "const one = 1;\n\nconst two = 2;";
+      const ast = parse(source);
 
-  it("structurally prints touched JavaScript nodes with leaf node mappings", () => {
-    const source = "const total = add(1, 2);";
-    const ast = parse(source);
+      const result = print(ast, {
+        source,
+        isUntouched: (node) => node.type !== "Program",
+      });
 
-    const result = print<string | undefined>(ast, {
-      source,
-      isUntouched: () => false,
-      getMappingData: (node) => node?.type,
+      expect(result.code).toBe(source);
+      expect(result.mappings).toHaveLength(1);
+      expect(result.mappings[0].sourceOffsets).toEqual([0]);
+      expect(result.mappings[0].generatedOffsets).toEqual([0]);
+      expect(result.mappings[0].lengths).toEqual([source.length]);
     });
 
-    expect(result.code).toBe("const total = add(1, 2);");
-    expect(result.mappings).toHaveLength(4);
-    expect(result.mappings.map((mapping) => mapping.data)).toEqual([
-      "Identifier",
-      "Identifier",
-      "Literal",
-      "Literal",
-    ]);
-  });
+    it("supports custom untouched detection", () => {
+      const source = "const untouched = 1;\nconst regenerated = 2;";
+      const ast = parse(source);
+      const regenerated = ast.body[1];
 
-  it("structurally prints basic TypeScript syntax", () => {
-    const source = [
-      "type Box<T> = { value: T; foo: null };",
-      "interface Named { readonly name?: string; }",
-      "const value: Box<number> = item satisfies Box<number>;",
-    ].join("\n");
-    const ast = parse(source);
+      const result = print(ast, {
+        source,
+        isUntouched: (node) =>
+          node !== ast &&
+          node !== regenerated &&
+          node.type !== "VariableDeclarator",
+      });
 
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
+      expect(result.code).toBe(source);
+      expect(result.mappings.map((mapping) => mapping.lengths[0])).toEqual([
+        "const untouched = 1;\n".length,
+        "regenerated".length,
+        "2".length,
+      ]);
     });
 
-    expect(result.code).toBe(
-      [
-        "type Box<T> = { value: T; foo: null; };",
-        "interface Named { readonly name?: string; }",
-        "const value: Box<number> = item satisfies Box<number>;",
-      ].join("\n"),
-    );
-  });
+    it("preserves nodes that only expose start and end offsets", () => {
+      const result = print(
+        {
+          type: "Identifier",
+          start: 0,
+          end: 6,
+          name: "changed",
+        } as AST.Node,
+        {
+          source: "actual",
+        },
+      );
 
-  it("structurally prints functions, blocks, members, and arrows", () => {
-    const source = [
-      "async function* load<T>(items: T[]): Promise<T> { return items[0]!; }",
-      "const fn = async (value: number): number => value + 1;",
-      "function collect(...items: string[]) {}",
-    ].join("\n");
-    const ast = parse(source);
-
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
+      expect(result.code).toBe("actual");
+      expect(result.mappings[0].sourceOffsets).toEqual([0]);
+      expect(result.mappings[0].lengths).toEqual([6]);
     });
 
-    expect(result.code).toBe(
-      [
-        "async function* load<T>(items: T[]): Promise<T> {\nreturn items[0]!;\n}",
-        "const fn = async (value: number): number => value + 1;",
-        "function collect(...items: string[]) {}",
-      ].join("\n"),
-    );
-  });
-
-  it("structurally prints object, array, spread, chain, and computed properties", () => {
-    const source =
-      "const data = { value, [key]: get?.(1), nested: { a: 1 }, list: [first, ...rest] };";
-    const ast = parse(source);
-
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
+    it("prints declaration with source gap preservation", () => {
+      const source = "const a = 1;\n\t  \n\nconst b = 2;\nconst c = 3;";
+      const ast = parse(source);
+      const result = print(ast, {
+        source,
+        isUntouched: (node) => node.type !== "Program",
+      });
+      expect(result.code).toBe(source);
     });
 
-    expect(result.code).toBe(
-      "const data = { value, [key]: get?.(1), nested: { a: 1 }, list: [first, ...rest] };",
-    );
-  });
-
-  it("structurally prints richer TypeScript declarations", () => {
-    const source = [
-      'type Mixed<T extends string = "x"> = string | number & boolean;',
-      "interface Child extends Parent<string> { [key]?: number; }",
-      "type Qualified = Namespace.Name;",
-    ].join("\n");
-    const ast = parse(source);
-
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
+    it("supports getMappingData without combineMappingData", () => {
+      const source = "const a = 1;\nconst b = 2;";
+      const ast = parse(source);
+      const firstDecl = ast.body[0];
+      const result = print<string>(firstDecl, {
+        source,
+        isUntouched: (node) => node !== firstDecl,
+        getMappingData: (node) => node?.type ?? "unknown",
+      });
+      expect(result.code).toBe("const a = 1;");
+      expect(result.mappings).toHaveLength(1);
+      expect(result.mappings[0].data).toBe("VariableDeclarator");
     });
 
-    expect(result.code).toBe(
-      [
-        'type Mixed<T extends string = "x"> = string | number & boolean;',
-        "interface Child extends Parent<string> { [key]?: number; }",
-        "type Qualified = Namespace.Name;",
-      ].join("\n"),
-    );
+    it("supports explicit combineMappingData", () => {
+      const source = "const a = 1;\nconst b = 2;";
+      const ast = parse(source);
+
+      const result = print<string | null>(ast, {
+        source,
+        isUntouched: (node) => node.type !== "Program",
+        getMappingData: (node) => node?.type || null,
+        combineMappingData: (left, right) =>
+          right === null ? left : `${left}+${right}`,
+      });
+
+      expect(result.mappings).toHaveLength(1);
+      expect(result.mappings[0].data).toBe(
+        "VariableDeclaration+VariableDeclaration",
+      );
+    });
+
+    it("throws when isUntouched returns true but node has no source range", () => {
+      expect(() =>
+        print({ type: "Identifier", name: "x" } as AST.Node, {
+          source: "",
+          isUntouched: () => true,
+        }),
+      ).toThrow(
+        "Node of type Identifier is marked as untouched but does not have valid source offsets",
+      );
+    });
   });
 
-  it("prints small generated nodes without source ranges", () => {
-    const result = print(
-      {
-        type: "PrivateIdentifier",
-        name: "secret",
-      } as AST.Node,
-      {
+  describe("printer context API", () => {
+    it("supports write, writeNode, writeNodeListWithSourceGaps, writeSource", () => {
+      const literal = {
+        type: "Literal",
+        value: 1,
+      } as AST.Node;
+      const program = {
+        type: "Program",
+        body: [
+          literal,
+          null,
+          {
+            type: "Literal",
+            value: 2,
+          },
+        ],
+      } as AST.Program;
+
+      const result = print(program, {
         source: "",
         isUntouched: () => false,
-      },
-    );
+        printers: {
+          Program: (_node, context) => {
+            context.write("");
+            context.writeNode(null);
+            context.writeNodeListWithSourceGaps(program.body, "\n");
+            context.writeSource(0, 0, null);
+            context.write("|");
+            context.writeNodeList([literal, null, literal], ",");
+          },
+        },
+      });
 
-    expect(result.code).toBe("#secret");
-  });
+      expect(result.code).toBe("1\n2|1,,1");
+    });
 
-  it("preserves nodes that only expose start and end offsets", () => {
-    const result = print(
-      {
+    it("supports writePreservedNode", () => {
+      const source = "preserve me";
+      const node = {
         type: "Identifier",
         start: 0,
-        end: 6,
-        name: "changed",
-      } as AST.Node,
-      {
-        source: "actual",
-      },
-    );
+        end: 11,
+        name: "preserve me",
+      } as AST.Node;
+      const result = print(node, {
+        source,
+        isUntouched: () => false,
+        printers: {
+          Identifier: (_node, context) => {
+            context.writePreservedNode(_node);
+          },
+        },
+      });
+      expect(result.code).toBe("preserve me");
+    });
 
-    expect(result.code).toBe("actual");
-    expect(result.mappings[0].sourceOffsets).toEqual([0]);
-    expect(result.mappings[0].lengths).toEqual([6]);
+    it("throws when writePreservedNode has no source range", () => {
+      const node = { type: "Identifier", name: "nope" } as AST.Node;
+      const result = print(node, {
+        source: "",
+        isUntouched: () => false,
+        printers: {
+          Identifier: (_node, context) => {
+            expect(() => context.writePreservedNode(_node)).toThrow(
+              "Cannot preserve node Identifier without source offsets",
+            );
+          },
+        },
+      });
+      expect(result.code).toBe("");
+    });
   });
 
-  it("reports unsupported touched nodes", () => {
+  describe("custom printers", () => {
+    it("supports custom printers with mapping data", () => {
+      const source = "const value = 1;";
+      const ast = parse(source);
+      const declaration = ast.body[0] as any as AST.VariableDeclaration;
+
+      const result = print<string | null>(declaration, {
+        source,
+        getMappingData: (node) => node?.type || null,
+        isUntouched: (node) =>
+          node !== declaration && node.type !== "VariableDeclarator",
+        printers: {
+          VariableDeclaration: (node, context) => {
+            const variable = node as AST.VariableDeclaration;
+            context.write("let ");
+            context.writeNode(variable.declarations[0]);
+            context.write(";");
+          },
+        },
+      });
+
+      expect(result.code).toBe("let value = 1;");
+      expect(result.mappings.map((mapping) => mapping.data)).toEqual([
+        "Identifier",
+        "Literal",
+      ]);
+    });
+
+    it("supports getMappingData for leaf node mappings", () => {
+      const source = "const total = add(1, 2);";
+      const ast = parse(source);
+
+      const result = print<string | undefined>(ast, {
+        source,
+        isUntouched: () => false,
+        getMappingData: (node) => node?.type,
+      });
+
+      expect(result.code).toBe("const total = add(1, 2);");
+      expect(result.mappings).toHaveLength(4);
+      expect(result.mappings.map((mapping) => mapping.data)).toEqual([
+        "Identifier",
+        "Identifier",
+        "Literal",
+        "Literal",
+      ]);
+    });
+  });
+
+  it("throws for unsupported touched node types", () => {
     expect(() =>
       print(
         {
@@ -193,795 +275,342 @@ describe("print", () => {
     ).toThrow("No printer registered for node type NotImplemented");
   });
 
-  it("lets custom printers use low-level context helpers", () => {
-    const literal = {
-      type: "Literal",
-      value: 1,
-    } as AST.Node;
-    const program = {
-      type: "Program",
-      body: [
-        literal,
-        null,
-        {
-          type: "Literal",
-          value: 2,
-        },
-      ],
-    } as AST.Program;
-
-    const result = print(program, {
-      source: "",
-      isUntouched: () => false,
-      printers: {
-        Program: (_node, context) => {
-          context.write("");
-          context.writeNode(null);
-          context.writeNodeListWithSourceGaps(program.body, "\n");
-          context.writeSource(0, 0, null);
-          context.write("|");
-          context.writeNodeList([literal, null, literal], ",");
-        },
-      },
-    });
-
-    expect(result.code).toBe("1\n2|1,,1");
-  });
-
-  it("supports explicit mapping-data combination", () => {
-    const source = "const a = 1;\nconst b = 2;";
-    const ast = parse(source);
-
-    const result = print<string | null>(ast, {
-      source,
-      isUntouched: (node) => node.type !== "Program",
-      getMappingData: (node) => node?.type || null,
-      combineMappingData: (left, right) =>
-        right === null ? left : `${left}+${right}`,
-    });
-
-    expect(result.mappings).toHaveLength(1);
-    expect(result.mappings[0].data).toBe(
-      "VariableDeclaration+VariableDeclaration",
-    );
-  });
-
-  it("supports custom untouched detection", () => {
-    const source = "const untouched = 1;\nconst regenerated = 2;";
-    const ast = parse(source);
-    const regenerated = ast.body[1];
-
-    const result = print(ast, {
-      source,
-      isUntouched: (node) =>
-        node !== ast &&
-        node !== regenerated &&
-        node.type !== "VariableDeclarator",
-    });
-
-    expect(result.code).toBe(source);
-    expect(result.mappings.map((mapping) => mapping.lengths[0])).toEqual([
-      "const untouched = 1;\n".length,
-      "regenerated".length,
-      "2".length,
-    ]);
-  });
-
-  it("supports custom printers and mapping data", () => {
-    const source = "const value = 1;";
-    const ast = parse(source);
-    const declaration = ast.body[0] as AST.VariableDeclaration;
-
-    const result = print<string | null>(declaration, {
-      source,
-      getMappingData: (node) => node?.type || null,
-      isUntouched: (node) =>
-        node !== declaration && node.type !== "VariableDeclarator",
-      printers: {
-        VariableDeclaration: (node, context) => {
-          const variable = node as AST.VariableDeclaration;
-          context.write("let ");
-          context.writeNode(variable.declarations[0]);
-          context.write(";");
-        },
-      },
-    });
-
-    expect(result.code).toBe("let value = 1;");
-    expect(result.mappings.map((mapping) => mapping.data)).toEqual([
-      "Identifier",
-      "Literal",
-    ]);
-  });
-
-  it("structurally prints precedence-aware binary and logical expressions", () => {
-    const source = "const x = a + b * c;";
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe("const x = a + b * c;");
-  });
-
-  it("structurally prints arrow concise body wrapping", () => {
-    const source = "const fn = () => ({ x: 1 } as const);";
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe("const fn = () => ({ x: 1 } as const);");
-  });
-
-  it("structurally prints expression statement wrapping for objects", () => {
-    const source = "({ x: 1 });";
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe("({ x: 1 });");
-  });
-
-  it("structurally prints conditional and sequence expressions", () => {
-    const source = "const x = a > b ? c : (d, e);";
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe("const x = a > b ? c : (d, e);");
-  });
-
-  it("structurally prints loops and branches", () => {
+  it("structurally prints all JavaScript syntax preserving semantics", () => {
     const source = [
-      "function f() {",
-      "if (x) return y; else if (z) throw e;",
-      "for (let i = 0; i < 10; i++) break;",
-      "for (const x of arr) continue;",
-      "while (true) debugger;",
-      "do {} while (cond);",
-      "}",
-    ].join("\n");
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe(source);
-  });
-
-  it("structurally prints switch and try statements", () => {
-    const source = [
-      "switch (x) {",
-      "case 1:",
-      "a;",
-      "default:",
-      "b;}",
-      "try {",
-      "c;",
-      "} catch (e) {",
-      "d;",
-      "} finally {",
-      "e;",
-      "}",
-    ].join("\n");
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe(source);
-  });
-
-  it("structurally prints class declarations and expressions", () => {
-    const source = [
-      "class Base {}",
-      "class Child extends Base<T> implements I {}",
-      "const cls = class extends Base {};",
-    ].join("\n");
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe(source);
-  });
-
-  it("structurally prints template literals", () => {
-    const source = "const msg = `hello ${name}`;";
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe("const msg = `hello ${name}`;");
-  });
-
-  it("structurally prints import and export declarations", () => {
-    const source = [
-      "import { x } from 'a';",
-      "export { y } from 'b';",
-      "export default z;",
-      "export * from 'c';",
-    ].join("\n");
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe(source);
-  });
-
-  it("structurally prints TS type assertions and non-null", () => {
-    const source = "const x = a as T; const y = b!;";
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe("const x = a as T; const y = b!;");
-  });
-
-  it("structurally prints TS advanced types", () => {
-    const source = [
-      "type A = [string, number, ...boolean[]];",
-      "type B = T[K];",
-      "type C = T extends U ? V : W;",
-      "type D = { [K in keyof T]: T[K] };",
-      "type E = infer R;",
-      "type F = typeof x;",
-    ].join("\n");
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe(source);
-  });
-
-  it("structurally prints TS enum and module declarations", () => {
-    const source = [
-      "enum Color { Red, Green = 3 }",
-      "declare module 'x' {",
-      "export const a: number;",
-      "}",
-      "namespace N {",
-      "export const b = 1;",
-      "}",
-    ].join("\n");
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe(source);
-  });
-
-  it("structurally prints TS function and constructor types", () => {
-    const source = [
-      "type F = (x: number) => string;",
-      "type C = new (x: number) => T;",
-    ].join("\n");
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe(source);
-  });
-
-  it("structurally prints TS template literal and import types", () => {
-    const source = [
-      "type T = `prefix-${string}-suffix`;",
-      "type I = import('a').X;",
-    ].join("\n");
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe(source);
-  });
-
-  it("structurally prints new expression", () => {
-    const source = "const x = new Foo(1);";
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe("const x = new Foo(1);");
-  });
-
-  it("structurally prints yield, await, update expressions", () => {
-    const source = [
-      "async function* gen() {",
-      "yield 1;",
-      "yield* iter;",
-      "await p;",
-      "}",
-      "function f() {",
-      "let i = 0;",
-      "i++;",
-      "--i;",
-      "}",
-    ].join("\n");
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe(source);
-  });
-
-  it("structurally prints for-in, empty, and labeled statements", () => {
-    const source = [
-      "function f(obj: any) {",
-      "for (const x in obj) i++;",
+      // declarations
+      "var aVar;",
+      "let bVar = 1;",
+      "const cVar = 2;",
+      "",
+      // expression / empty / label
+      "expr;",
+      "({ foo: 1 });",
       ";",
-      "label: x++;",
+      "outer: expr++;",
+      "",
+      // functions
+      "function fReturn() {",
+      "return;",
       "}",
-    ].join("\n");
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe(source);
-  });
-
-  it("structurally prints class members and this-type", () => {
-    const source = [
-      "class C extends B {",
-      "static x = 1;",
-      "private y: number;",
+      "function gReturn() {",
+      "return 42;",
+      "}",
+      "function hThrow() {",
+      "throw new Error();",
+      "}",
+      "function iDebug() {",
+      "debugger;",
+      "}",
+      "",
+      // meta property in function
+      "function metaProp() {",
+      "new.target;",
+      "}",
+      "",
+      // loops inside a function (break/continue need loop context)
+      "function loops() {",
+      "outerLoop: while (true) break outerLoop;",
+      "do {} while (cond);",
+      "for (let i = 0; i < 10; i++) break;",
+      "for (j; ; ) {}",
+      "for (; ; ) continue;",
+      "}",
+      "",
+      // control flow in a function
+      "function controlFlow() {",
+      "if (x) return y; else if (z) throw e; else {}",
+      "}",
+      "",
+      // for-in / for-of at top level (var declarations work)
+      "var vVar; for (vVar in obj) {}",
+      "for (const kVar in obj) {}",
+      "for (const item of arr) continue;",
+      "",
+      // switch
+      "switch (val) {",
+      "case 1:",
+      "stmt1;",
+      "break;",
+      "default:",
+      "stmt2;",
+      "}",
+      "",
+      // try/catch/finally
+      "try {",
+      "stmt3;",
+      "} catch (e) {",
+      "stmt4;",
+      "} finally {",
+      "stmt5;",
+      "}",
+      "",
+      // catch without param
+      "try {",
+      "stmt6;",
+      "} catch {",
+      "stmt7;",
+      "}",
+      "",
+      // generator / async
+      "function* aGen() {",
+      "yield 1;",
+      "yield* iterable;",
+      "}",
+      "",
+      "async function aAsync() {",
+      "await promise;",
+      "for await (const item of asyncIter) {}",
+      "}",
+      "",
+      // function expressions
+      "const anonFunc = function() {};",
+      "const namedFunc = function namedOne() {};",
+      "",
+      // arrow functions
+      "const arrowSimple = () => 1;",
+      "const arrowObj = () => ({ x: 1 });",
+      "",
+      // classes
+      "class BaseClass {}",
+      "class ChildClass extends BaseClass {",
+      "static st = 1;",
+      "#secret = 1;",
       "constructor() {",
       "super();",
       "}",
-      "method(): this {",
+      "aMethod() {",
       "return this;",
       "}",
-      "get z() {",
+      "get aProp() {",
       "return 0;",
       "}",
-      "set z(v) {}",
+      "set aProp(vv) {}",
+      "async *genMethod() {}",
+      "[computedKey]() {}",
+      "static {}",
       "}",
+      "",
+      // class expressions
+      "const clsAnon = class {};",
+      "const clsNamed = class NamedExpr {};",
+      "",
+      // object, array, spread
+      "const objLit = {",
+      "val,",
+      "[key]: get?.(),",
+      "nested: { a: 1 },",
+      "list: [first, ...rest],",
+      "get gProp() {},",
+      "set sProp(x) {},",
+      "};",
+      "const { xx, ...restX } = objLit;",
+      "const [yy, ...restY] = listVar;",
+      "",
+      // assignment pattern
+      "function withDefault(param = 1) {}",
+      "",
+      // template literals
+      "const tmplStr = `hello ${name}`;",
+      "const taggedStr = tag`hello ${name}`;",
+      "",
+      // binary / logical precedence
+      "const pMul = 1 + 2 * 3;",
+      "const pNullish = (aa ?? bb) && cc;",
+      "const pExp = (aa ** bb) ** cc;",
+      "const pCond = aa > bb ? cc : (dd, ee);",
+      "const pAssign = (aa = bb) ? cc : dd;",
+      "",
+      // unary / update / typeof
+      "typeof yy;",
+      "!flag;",
+      "zz++;",
+      "--zz;",
+      "",
+      // new / call / optional chain
+      "const newExpr = new Foo(1);",
+      "new (getFoo())(1);",
+      "newExpr.bar?.();",
+      "chainA?.b;",
+      "chainA?.[0];",
+      "chainA?.();",
+      "f({ x: 1 });",
+      "f({} = xVar);",
+      "",
+      // imports (all forms, must be at top level)
+      "import { impX } from 'modA';",
+      "import impY from 'modB';",
+      "import * as ns from 'modC';",
+      "import impZ, { a as b } from 'modD';",
+      "import 'modE';",
+      "const dynImp = import('modF');",
+      "",
+      // exports
+      "const localA = 1;",
+      "export { localA as exportedB };",
+      "export { expY } from 'modG';",
+      "export default 42;",
+      "export * from 'modH';",
+      "export * as ns2 from 'modI';",
     ].join("\n");
+
     const ast = parse(source);
     const result = print(ast, {
       source,
       isUntouched: () => false,
     });
-    expect(result.code).toBe(source);
+
+    expect(result.code).toMatchSnapshot();
   });
 
-  it("structurally prints assignment pattern and tagged template", () => {
+  it("structurally prints all TypeScript syntax preserving semantics", () => {
     const source = [
-      "function f(x = 1) {}",
-      "const msg = tag`hello ${name}`;",
-    ].join("\n");
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe(source);
-  });
-
-  it("structurally prints import specifiers and dynamic import", () => {
-    const source = [
-      "import x, { y as z } from 'a';",
-      "import * as ns from 'b';",
-      "import type { T } from 'c';",
-      "const m = import('d');",
-    ].join("\n");
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe(source);
-  });
-
-  it("structurally prints TS index, call, construct signatures", () => {
-    const source =
-      "interface I { [key: string]: number; (x: number): string; new (x: number): I; }";
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe(source);
-  });
-
-  it("structurally prints TS type operator, predicate, and indexed access", () => {
-    const source = [
-      "type K = keyof T;",
-      "type U = unique symbol;",
-      "function isString(x: unknown): x is string {",
-      "return true;",
-      "}",
-      "type V = T[K];",
-    ].join("\n");
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe(source);
-  });
-
-  it("structurally prints TS optional, rest, this, readonly parameter", () => {
-    const source = [
-      "type O = [string?];",
-      "type R = [...number[]];",
-      "function f(this: void) {}",
-      "class C {",
-      "constructor(readonly x: number) {}",
-      "}",
-      "declare function g(): void;",
-    ].join("\n");
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe(source);
-  });
-
-  it("structurally prints TS import equals, namespace export, export assignment", () => {
-    const source = [
-      "import X = require('x');",
+      // TS import/export variants
+      "import { type impX } from 'a';",
+      "import type { TT } from 'e';",
+      "import type * as nsT from 'f';",
+      "import X = require('g');",
+      "import X2 = Y.Z;",
+      "const dynImp = import('h');",
+      "",
+      "export type { T2 } from 'j';",
+      "export type * from 'k';",
+      "export * as ns2 from 'l';",
+      "export default 42;",
       "export = expr;",
       "export as namespace NS;",
-    ].join("\n");
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe(source);
-  });
-
-  it("structurally prints parenthesized expression and conditional precedence", () => {
-    const source = "const x = (a = b) ? c : d;";
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe("const x = (a = b) ? c : d;");
-  });
-
-  it("structurally prints abstract class, accessibility modifiers, declare class", () => {
-    const source = [
-      "abstract class A {",
+      "export type * as tns from 'm';",
+      "",
+      // type aliases
+      "type Box<T> = { value: T; foo: (string | null) };",
+      'type Mixed<T extends string = "x"> = string | number & boolean;',
+      "type Qualified = Namespace.Name;",
+      "type Tup = [string, number, ...boolean[]];",
+      "type NamedTup = [label: string, value: number];",
+      "type Idx = TK[K];",
+      "type Cond = T extends U ? V : W;",
+      "type Mapped = { [K in keyof T]: T[K] };",
+      "type InferCond = T extends infer R ? R : never;",
+      "type StandaloneInfer = infer R;",
+      "type TypeofX = typeof xVal;",
+      "type KeyofType = keyof T;",
+      "type UniqueType = unique symbol;",
+      "type LitType = 'hello';",
+      "type TplLit = `prefix-${string}-suffix`;",
+      "type ImpTpQ = import('o').X;",
+      "type ImpTpP = import('p');",
+      "type FT = (x: number) => string;",
+      "type CT = new (x: number) => T;",
+      "type FTGen = <T>(x: T) => string;",
+      "type CTGen = new <T>(x: T) => string;",
+      "type OptTup = [string?];",
+      "type RestTup = [...number[]];",
+      "type RefNoArgs = Foo;",
+      "",
+      // interfaces
+      "interface INamed { readonly name?: string; }",
+      "interface IChild extends Parent<string> { [key]?: number; }",
+      "interface ISig {",
+      "[index: string]: number;",
+      "(x: number): string;",
+      "new (x: number): ISig;",
+      "}",
+      "interface IMeth {",
+      "m<T>(x: T): T;",
+      "[method]?(): void;",
+      "}",
+      "interface InOutIntf<in out T> {}",
+      "",
+      // declare variants
+      "declare interface IDI {};",
+      "declare const dv: number;",
+      "declare let dl: number;",
+      "declare var dvar: number;",
+      "declare function df(): void;",
+      "declare function dg<T>(x: T): T;",
+      "declare class DC {}",
+      "declare enum DE2 { X }",
+      "declare module 'md';",
+      "declare global {",
+      "var gx: number;",
+      "}",
+      "declare type DT = string;",
+      "",
+      // abstract class
+      "abstract class AC {",
       "abstract method(): void;",
       "public x: number;",
       "protected readonly y: string;",
+      "abstract accessor z: number;",
       "}",
-      "declare class B {}",
-    ].join("\n");
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe(source);
-  });
-
-  it("structurally prints parameter property with accessibility", () => {
-    const source = "class C { constructor(public readonly x: number) {} }";
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe(
-      ["class C {", "constructor(public readonly x: number) {}", "}"].join(
-        "\n",
-      ),
-    );
-  });
-
-  it("structurally prints optional identifiers and call chain precedence", () => {
-    const source = "const fn = (x?: number) => new Foo(x).bar?.();";
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe("const fn = (x?: number) => new Foo(x).bar?.();");
-  });
-
-  it("structurally prints declare function variants", () => {
-    const source = [
-      "declare function f(): void;",
-      "declare function g<T>(x: T): T;",
-    ].join("\n");
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe(source);
-  });
-
-  it("structurally prints logical ?? and binary ** precedence parens", () => {
-    const source = "const x = (a ?? b) && c; const y = (a ** b) ** c;";
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe(
-      "const x = (a ?? b) && c; const y = (a ** b) ** c;",
-    );
-  });
-
-  it("structurally prints as/satisfies/non-null expression precedence", () => {
-    const source = "const x = a = b as T;";
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe("const x = a = b as T;");
-  });
-
-  it("structurally prints unary and await precedence parens", () => {
-    const source = [
-      "async function f() {",
-      "await (a ?? b);",
+      "",
+      // enums
+      "enum Color { Red, Green = 3 }",
+      "const enum CE { A, B }",
+      "",
+      // namespace
+      "namespace NNS {",
+      "export const b = 1;",
       "}",
-      "const x = !a as T;",
-    ].join("\n");
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe(source);
-  });
-
-  it("structurally prints decorators and keyword type", () => {
-    const source = "class C { @dec x: boolean = true; }";
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe(
-      ["class C {", "@dec", "x: boolean = true;", "}"].join("\n"),
-    );
-  });
-
-  it("structurally prints declare async function", () => {
-    // construct MANUALLY since TS parser doesn't produce async on declare functions
-    const node = {
-      type: "TSDeclareFunction",
-      async: true,
-      generator: true,
-      id: { type: "Identifier", name: "f" },
-      typeParameters: {
-        type: "TSTypeParameterDeclaration",
-        params: [
-          {
-            type: "TSTypeParameter",
-            name: "T",
-            constraint: null,
-            default: null,
-          },
-        ],
-      },
-      params: [],
-      returnType: null,
-      declare: true,
-    } as unknown as AST.Node;
-    const result = print(node, {
-      source: "",
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe("declare async function* f<T>();");
-  });
-
-  it("structurally prints TSExternalModuleReference manually", () => {
-    const program = {
-      type: "Program",
-      body: [
-        {
-          type: "TSImportEqualsDeclaration",
-          id: { type: "Identifier", name: "X" },
-          moduleReference: {
-            type: "TSExternalModuleReference",
-            expression: { type: "Literal", value: "mod", raw: "'mod'" },
-          },
-        },
-      ],
-    } as unknown as AST.Node;
-    const result = print(program, {
-      source: "",
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe("import X = require('mod');");
-  });
-
-  it("structurally prints const enum and declare global", () => {
-    const source = [
-      "const enum E { A, B }",
-      "declare enum F { X }",
-      "declare global {",
-      "var x: number;",
+      "",
+      // parameter property
+      "class PC { constructor(public readonly x: number) {} }",
+      "",
+      // decorators
+      "@dec class Decorated {}",
+      "@dec1 @dec2 class MultiDecorated {}",
+      "@dec export class ExportedDecorated {}",
+      "@dec export default class DefaultExportedDecorated {}",
+      "",
+      // decorators on members
+      "class ClassWithDec {",
+      "@dec accessor x: number = 0;",
+      "@dec2 y: boolean = true;",
+      "}",
+      "",
+      // accessor property
+      "class AccClass {",
+      "accessor a: number = 0;",
+      "accessor b: number;",
+      "accessor c = 0;",
+      "}",
+      "",
+      // type assertions / satisfies / non-null
+      "const assertVal = aVal as T;",
+      "const satVal = item satisfies Box<number>;",
+      "const nonNull = bVal!;",
+      "const combinedAs = aVal = bVal as T;",
+      "",
+      // typed variable with satisfies
+      "const typedVal: Box<number> = val satisfies Box<number>;",
+      "",
+      // await / unary precedence
+      "const unaryAs = !aVal as T;",
+      "",
+      // this / readonly param
+      "function thisFunc(this: void) {}",
+      "class ROClass { constructor(readonly x: number) {} }",
+      "class PPClass { constructor(private readonly x: string) {} }",
+      "",
+      // type predicate
+      "function assert(x: unknown): asserts x {}",
+      "function assert2(cond: unknown): cond is string {}",
+      "",
+      // class implements / super type params
+      "class ImplClass implements IInt {}",
+      "class STClass extends BaseClass<T> {}",
+      "",
+      "class CWithOverride extends BaseMeth {",
+      "public override [methodK]() {}",
+      "protected override readonly pw = 1;",
       "}",
     ].join("\n");
+
     const ast = parse(source);
     const result = print(ast, {
       source,
       isUntouched: () => false,
     });
-    expect(result.code).toBe(source);
-  });
 
-  it("prints synthetic TS instantiation and parenthesized type nodes", () => {
-    const result = print(
-      {
-        type: "TSInstantiationExpression",
-        expression: { type: "Identifier", name: "Foo" },
-        typeArguments: {
-          type: "TSTypeParameterInstantiation",
-          params: [
-            {
-              type: "TSTypeReference",
-              typeName: { type: "Identifier", name: "Bar" },
-            },
-          ],
-        },
-      } as unknown as AST.Node,
-      {
-        source: "",
-        isUntouched: () => false,
-      },
-    );
-    expect(result.code).toBe("Foo<Bar>");
-
-    const result2 = print(
-      {
-        type: "TSParenthesizedType",
-        typeAnnotation: {
-          type: "TSUnionType",
-          types: [{ type: "TSStringKeyword" }, { type: "TSNumberKeyword" }],
-        },
-      } as unknown as AST.Node,
-      {
-        source: "",
-        isUntouched: () => false,
-      },
-    );
-    expect(result2.code).toBe("(string | number)");
-  });
-
-  it("prints declaration with source gap preservation", () => {
-    const source = "const a = 1;\nconst b = 2;\nconst c = 3;";
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: (node) => node.type !== "Program",
-    });
-    expect(result.code).toBe(source);
-  });
-
-  it("structurally prints asserts type predicate", () => {
-    const source = "function assert(cond: unknown): asserts cond is string {}";
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe(
-      "function assert(cond: unknown): asserts cond is string {}",
-    );
-  });
-
-  it("prints synthetic TSTemplateLiteralType", () => {
-    const node = {
-      type: "TSTemplateLiteralType",
-      quasis: [{ value: { raw: "prefix-" } }, { value: { raw: "-suffix" } }],
-      types: [{ type: "TSStringKeyword" }],
-    } as unknown as AST.Node;
-    const result = print(node, {
-      source: "",
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe("`prefix-${string}-suffix`");
-  });
-
-  it("structurally prints accessor property", () => {
-    const source = "class Foo { accessor x: number = 0; }";
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe(
-      ["class Foo {", "accessor x: number = 0;", "}"].join("\n"),
-    );
-  });
-
-  it("structurally prints accessor property without initializer", () => {
-    const source = "class Foo { accessor x: number; }";
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe(
-      ["class Foo {", "accessor x: number;", "}"].join("\n"),
-    );
-  });
-
-  it("structurally prints accessor property without type annotation", () => {
-    const source = "class Foo { accessor x = 0; }";
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe(
-      ["class Foo {", "accessor x = 0;", "}"].join("\n"),
-    );
-  });
-
-  it("structurally prints accessor property with decorator", () => {
-    const source = "class Foo { @dec accessor x: number = 0; }";
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe(
-      ["class Foo {", "@dec", "accessor x: number = 0;", "}"].join("\n"),
-    );
-  });
-
-  it("structurally prints decorated class declaration", () => {
-    const source = "@dec class Foo {}";
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe("@dec\nclass Foo {}");
-  });
-
-  it("structurally prints decorated class with multiple decorators", () => {
-    const source = "@dec1 @dec2 class Foo {}";
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe("@dec1\n@dec2\nclass Foo {}");
-  });
-
-  it("structurally prints exported decorated class declaration", () => {
-    const source = "@dec export class Foo {}";
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe("@dec\nexport class Foo {}");
-  });
-
-  it("structurally prints default-exported decorated class declaration", () => {
-    const source = "@dec export default class Foo {}";
-    const ast = parse(source);
-    const result = print(ast, {
-      source,
-      isUntouched: () => false,
-    });
-    expect(result.code).toBe("@dec\nexport default class Foo {}");
+    expect(result.code).toMatchSnapshot();
   });
 });

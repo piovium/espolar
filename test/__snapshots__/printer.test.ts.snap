@@ -1,0 +1,278 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`print > structurally prints all JavaScript syntax preserving semantics 1`] = `
+"var aVar;
+let bVar = 1;
+const cVar = 2;
+
+expr;
+({ foo: 1 });
+;
+outer: expr++;
+
+function fReturn() {
+return;
+}
+function gReturn() {
+return 42;
+}
+function hThrow() {
+throw new Error();
+}
+function iDebug() {
+debugger;
+}
+
+function metaProp() {
+new.target;
+}
+
+function loops() {
+outerLoop: while (true) break outerLoop;
+do {} while (cond);
+for (let i = 0; i < 10; i++) break;
+for (j; ; ) {}
+for (; ; ) continue;
+}
+
+function controlFlow() {
+if (x) return y; else if (z) throw e; else {}
+}
+
+var vVar; for (vVar in obj) {}
+for (const kVar in obj) {}
+for (const item of arr) continue;
+
+switch (val) {
+case 1:
+stmt1;
+break;
+default:
+stmt2;}
+
+try {
+stmt3;
+} catch (e) {
+stmt4;
+} finally {
+stmt5;
+}
+
+try {
+stmt6;
+} catch {
+stmt7;
+}
+
+function* aGen() {
+yield 1;
+yield* iterable;
+}
+
+async function aAsync() {
+await promise;
+for await (const item of asyncIter) {}
+}
+
+const anonFunc = function() {};
+const namedFunc = function namedOne() {};
+
+const arrowSimple = () => 1;
+const arrowObj = () => ({ x: 1 });
+
+class BaseClass {}
+class ChildClass extends BaseClass {
+static st = 1;
+#secret = 1;
+constructor() {
+super();
+}
+aMethod() {
+return this;
+}
+get aProp() {
+return 0;
+}
+set aProp(vv) {}
+async *genMethod() {}
+[computedKey]() {}
+static {}
+}
+
+const clsAnon = class {};
+const clsNamed = class NamedExpr {};
+
+const objLit = { val, [key]: get?.(), nested: { a: 1 }, list: [first, ...rest], get gProp() {}, set sProp(x) {} };
+const { xx, ...restX } = objLit;
+const [yy, ...restY] = listVar;
+
+function withDefault(param = 1) {}
+
+const tmplStr = \`hello \${name}\`;
+const taggedStr = tag\`hello \${name}\`;
+
+const pMul = 1 + 2 * 3;
+const pNullish = (aa ?? bb) && cc;
+const pExp = (aa ** bb) ** cc;
+const pCond = aa > bb ? cc : (dd, ee);
+const pAssign = (aa = bb) ? cc : dd;
+
+typeof yy;
+!flag;
+zz++;
+--zz;
+
+const newExpr = new Foo(1);
+new (getFoo())(1);
+newExpr.bar?.();
+chainA?.b;
+chainA?.[0];
+chainA?.();
+f({ x: 1 });
+f({  } = xVar);
+
+import { impX } from 'modA';
+import impY from 'modB';
+import * as ns from 'modC';
+import impZ, { a as b } from 'modD';
+import 'modE';
+const dynImp = import('modF');
+
+const localA = 1;
+export { localA as exportedB };
+export { expY } from 'modG';
+export default 42;
+export * from 'modH';
+export * as ns2 from 'modI';"
+`;
+
+exports[`print > structurally prints all TypeScript syntax preserving semantics 1`] = `
+"import { type impX } from 'a';
+import type { TT } from 'e';
+import type * as nsT from 'f';
+import X = require('g');
+import X2 = Y.Z;
+const dynImp = import('h');
+
+export type { T2 } from 'j';
+export type * from 'k';
+export * as ns2 from 'l';
+export default 42;
+export = expr;
+export as namespace NS;
+export type * as tns from 'm';
+
+type Box<T> = { value: T; foo: (string | null); };
+type Mixed<T extends string = "x"> = string | number & boolean;
+type Qualified = Namespace.Name;
+type Tup = [string, number, ...boolean[]];
+type NamedTup = [label: string, value: number];
+type Idx = TK[K];
+type Cond = T extends U ? V : W;
+type Mapped = { [K in keyof T]: T[K] };
+type InferCond = T extends infer R ? R : never;
+type StandaloneInfer = infer R;
+type TypeofX = typeof xVal;
+type KeyofType = keyof T;
+type UniqueType = unique symbol;
+type LitType = 'hello';
+type TplLit = \`prefix-\${string}-suffix\`;
+type ImpTpQ = import('o').X;
+type ImpTpP = import('p');
+type FT = (x: number) => string;
+type CT = new (x: number) => T;
+type FTGen = <T>(x: T) => string;
+type CTGen = new <T>(x: T) => string;
+type OptTup = [string?];
+type RestTup = [...number[]];
+type RefNoArgs = Foo;
+
+interface INamed { readonly name?: string; }
+interface IChild extends Parent<string> { [key]?: number; }
+interface ISig { [index: string]: number; (x: number): string; new (x: number): ISig; }
+interface IMeth { m<T>(x: T): T; [method]?(): void; }
+interface InOutIntf<in out T> {}
+
+declare interface IDI {};
+declare const dv: number;
+declare let dl: number;
+declare var dvar: number;
+declare function df(): void;
+declare function dg<T>(x: T): T;
+declare class DC {}
+declare enum DE2 { X }
+declare module 'md'
+declare global {
+var gx: number;
+}
+declare type DT = string;
+
+abstract class AC {
+abstract method(): void;
+public x: number;
+protected readonly y: string;
+abstract accessor z: number;
+}
+
+enum Color { Red, Green = 3 }
+const enum CE { A, B }
+
+namespace NNS {
+export const b = 1;
+}
+
+class PC {
+constructor(public readonly x: number) {}
+}
+
+@dec
+class Decorated {}
+@dec1
+@dec2
+class MultiDecorated {}
+@dec @dec
+export class ExportedDecorated {}
+@dec @dec
+export default class DefaultExportedDecorated {}
+
+class ClassWithDec {
+@dec
+accessor x: number = 0;
+@dec2
+y: boolean = true;
+}
+
+class AccClass {
+accessor a: number = 0;
+accessor b: number;
+accessor c = 0;
+}
+
+const assertVal = aVal as T;
+const satVal = item satisfies Box<number>;
+const nonNull = bVal!;
+const combinedAs = aVal = bVal as T;
+
+const typedVal: Box<number> = val satisfies Box<number>;
+
+const unaryAs = !aVal as T;
+
+function thisFunc(this: void) {}
+class ROClass {
+constructor(readonly x: number) {}
+}
+class PPClass {
+constructor(private readonly x: string) {}
+}
+
+function assert(x: unknown): asserts x {}
+function assert2(cond: unknown): cond is string {}
+
+class ImplClass  implements IInt {}
+class STClass extends BaseClass<T> {}
+
+class CWithOverride extends BaseMeth {
+public override [methodK]() {}
+protected override readonly pw = 1;
+}"
+`;
