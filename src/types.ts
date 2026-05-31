@@ -13,8 +13,28 @@ declare module "@typescript-eslint/types" {
       parameters?: Parameter[];
     }
     export interface TSFunctionType extends BabelTSFunctionSignatureBase {}
+    export interface TSConstructorType extends BabelTSFunctionSignatureBase {}
+    export interface TSCallSignatureDeclaration extends BabelTSFunctionSignatureBase {}
+    export interface TSConstructSignatureDeclaration extends BabelTSFunctionSignatureBase {}
+    export interface TSIndexSignature extends BabelTSFunctionSignatureBase {}
     export interface TSMethodSignatureComputedName extends BabelTSFunctionSignatureBase {}
     export interface TSMethodSignatureNonComputedName extends BabelTSFunctionSignatureBase {}
+
+    interface BabelTSAbstractBase {
+      abstract?: boolean;
+      accessor?: boolean;
+    }
+    export interface MethodDefinitionComputedName extends BabelTSAbstractBase {}
+    export interface MethodDefinitionNonComputedName extends BabelTSAbstractBase {}
+    export interface PropertyDefinitionComputedName extends BabelTSAbstractBase {}
+    export interface PropertyDefinitionNonComputedName extends BabelTSAbstractBase {}
+
+    interface BabelClassBase {
+      superTypeParameters?: TSTypeParameterInstantiation;
+    }
+    export interface ClassDeclarationWithName extends BabelClassBase {}
+    export interface ClassDeclarationWithOptionalName extends BabelClassBase {}
+    export interface ClassExpression extends BabelClassBase {}
   }
 }
 

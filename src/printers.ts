@@ -1,44 +1,288 @@
 import type { PrinterContext, Printers } from "./api.ts";
 import type { AST } from "./types.ts";
 
+/* -----------------------------------------------------------------------------
+   Precedence tables (matching esrap)
+   ----------------------------------------------------------------------------- */
+
+const EXPRESSIONS_PRECEDENCE: Record<string, number> = {
+  ArrayPattern: 20,
+  ObjectPattern: 20,
+  ArrayExpression: 20,
+  TaggedTemplateExpression: 20,
+  ThisExpression: 20,
+  Identifier: 20,
+  TemplateLiteral: 20,
+  Super: 20,
+  SequenceExpression: 20,
+  MemberExpression: 19,
+  MetaProperty: 19,
+  CallExpression: 19,
+  ChainExpression: 19,
+  ImportExpression: 19,
+  NewExpression: 19,
+  Literal: 18,
+  TSSatisfiesExpression: 18,
+  TSInstantiationExpression: 18,
+  TSNonNullExpression: 18,
+  TSTypeAssertion: 18,
+  AwaitExpression: 17,
+  ClassExpression: 17,
+  FunctionExpression: 17,
+  ObjectExpression: 17,
+  TSAsExpression: 16,
+  UpdateExpression: 16,
+  UnaryExpression: 15,
+  BinaryExpression: 14,
+  LogicalExpression: 13,
+  ConditionalExpression: 4,
+  ArrowFunctionExpression: 3,
+  AssignmentExpression: 3,
+  YieldExpression: 2,
+  RestElement: 1,
+};
+
+const OPERATOR_PRECEDENCE: Record<string, number> = {
+  "||": 2,
+  "&&": 3,
+  "??": 4,
+  "|": 5,
+  "^": 6,
+  "&": 7,
+  "==": 8,
+  "!=": 8,
+  "===": 8,
+  "!==": 8,
+  "<": 9,
+  ">": 9,
+  "<=": 9,
+  ">=": 9,
+  in: 9,
+  instanceof: 9,
+  "<<": 10,
+  ">>": 10,
+  ">>>": 10,
+  "+": 11,
+  "-": 11,
+  "*": 12,
+  "%": 12,
+  "/": 12,
+  "**": 13,
+};
+
+/* -----------------------------------------------------------------------------
+   Helper functions (matching esrap semantics)
+   ----------------------------------------------------------------------------- */
+
+function needsParens(
+  node: AST.Expression | AST.PrivateIdentifier,
+  parent: AST.BinaryExpression | AST.LogicalExpression | AST.AssignmentExpression,
+  isRight: boolean,
+): boolean {
+  if (
+    node.type === "PrivateIdentifier" ||
+    node.type === "Identifier" ||
+    node.type === "Super"
+  ) {
+    return false;
+  }
+
+  // LogicalExpression mixed with ?? requires parens
+  if (
+    node.type === "LogicalExpression" &&
+    parent.type === "LogicalExpression" &&
+    (parent.operator === "??") !== (node.operator === "??")
+  ) {
+    return true;
+  }
+
+  const precedence = EXPRESSIONS_PRECEDENCE[node.type] ?? 20;
+  const parentPrecedence = EXPRESSIONS_PRECEDENCE[parent.type] ?? 20;
+
+  if (precedence !== parentPrecedence) {
+    // ** is right-to-left associative: `a ** b ** c` => `a ** (b ** c)`
+    if (
+      !isRight &&
+      precedence === 15 &&
+      parentPrecedence === 14 &&
+      parent.operator === "**"
+    ) {
+      return false;
+    }
+    return precedence < parentPrecedence;
+  }
+
+  if (precedence !== 13 && precedence !== 14) {
+    return false;
+  }
+
+  const nodeOp = (node as AST.BinaryExpression | AST.LogicalExpression)
+    .operator;
+  if (nodeOp === "**" && parent.operator === "**") {
+    return !isRight;
+  }
+
+  if (isRight) {
+    return OPERATOR_PRECEDENCE[nodeOp] <= OPERATOR_PRECEDENCE[parent.operator];
+  }
+  return OPERATOR_PRECEDENCE[nodeOp] < OPERATOR_PRECEDENCE[parent.operator];
+}
+
+function arrowConciseBodyNeedsWrap(
+  body: AST.BlockStatement | AST.Expression,
+): boolean {
+  if (body.type === "BlockStatement") return false;
+  switch (body.type) {
+    case "ObjectExpression":
+      return true;
+    case "AssignmentExpression":
+      return body.left.type === "ObjectPattern";
+    case "LogicalExpression":
+      return body.left.type === "ObjectExpression";
+    case "ConditionalExpression":
+      return body.test.type === "ObjectExpression";
+    case "TSAsExpression":
+    case "TSSatisfiesExpression":
+    case "TSNonNullExpression":
+      return body.expression
+        ? arrowConciseBodyNeedsWrap(body.expression)
+        : false;
+    default:
+      return false;
+  }
+}
+
+type FuncLike = {
+  async?: boolean;
+  generator?: boolean;
+  id?: AST.Identifier | null;
+  typeParameters?: AST.TSTypeParameterDeclaration | null;
+  params: AST.Parameter[];
+  parameters?: AST.Parameter[];
+  returnType?: AST.TSTypeAnnotation | null;
+  typeAnnotation?: AST.TSTypeAnnotation | null;
+  body?: AST.BlockStatement | AST.Expression | null;
+};
+
+function printFuncParams(
+  node: FuncLike,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("(");
+  const params = node.params ?? node.parameters ?? [];
+  context.writeNodeList(params, ", ");
+  context.write(")");
+}
+
+function printFuncReturnType(
+  node: FuncLike,
+  context: PrinterContext<unknown>,
+): void {
+  const ret = node.returnType ?? node.typeAnnotation;
+  if (ret) {
+    context.writeNode(ret);
+  }
+}
+
+/* -----------------------------------------------------------------------------
+   Printers
+   ----------------------------------------------------------------------------- */
+
 export const defaultPrinters: Printers<unknown> = {
   Program: printProgram,
   Identifier: printIdentifier,
   PrivateIdentifier: printPrivateIdentifier,
   Literal: printLiteral,
   ExpressionStatement: printExpressionStatement,
+  EmptyStatement: printEmptyStatement,
   VariableDeclaration: printVariableDeclaration,
   VariableDeclarator: printVariableDeclarator,
   BlockStatement: printBlockStatement,
   ReturnStatement: printReturnStatement,
+  ThrowStatement: printThrowStatement,
+  DebuggerStatement: printDebuggerStatement,
+  BreakStatement: printBreakStatement,
+  ContinueStatement: printContinueStatement,
+  LabeledStatement: printLabeledStatement,
+  WhileStatement: printWhileStatement,
+  DoWhileStatement: printDoWhileStatement,
+  IfStatement: printIfStatement,
+  ForStatement: printForStatement,
+  ForInStatement: printForInStatement,
+  ForOfStatement: printForOfStatement,
+  SwitchStatement: printSwitchStatement,
+  SwitchCase: printSwitchCase,
+  TryStatement: printTryStatement,
+  WithStatement: printWithStatement,
   FunctionDeclaration: printFunctionDeclaration,
   FunctionExpression: printFunctionExpression,
   ArrowFunctionExpression: printArrowFunctionExpression,
+  UnaryExpression: printUnaryExpression,
+  UpdateExpression: printUpdateExpression,
   BinaryExpression: printBinaryExpression,
   LogicalExpression: printBinaryExpression,
   AssignmentExpression: printBinaryExpression,
+  ConditionalExpression: printConditionalExpression,
+  YieldExpression: printYieldExpression,
+  AwaitExpression: printAwaitExpression,
+  SequenceExpression: printSequenceExpression,
   CallExpression: printCallExpression,
+  NewExpression: printNewExpression,
   ChainExpression: printChainExpression,
   MemberExpression: printMemberExpression,
   ObjectExpression: printObjectExpression,
-  Property: printProperty,
+  ObjectPattern: printObjectPattern,
   ArrayExpression: printArrayExpression,
+  ArrayPattern: printArrayPattern,
+  Property: printProperty,
   SpreadElement: printSpreadElement,
   RestElement: printRestElement,
-  TSAsExpression: printTypeCastExpression,
-  TSSatisfiesExpression: printTypeCastExpression,
+  AssignmentPattern: printAssignmentPattern,
+  TemplateLiteral: printTemplateLiteral,
+  TaggedTemplateExpression: printTaggedTemplateExpression,
+  ThisExpression: printThisExpression,
+  Super: printSuper,
+  MetaProperty: printMetaProperty,
+  // @ts-expect-error acorn-typescript compat (ParenthesizedExpression is not in TSESTree types)
+  ParenthesizedExpression: printParenthesizedExpression,
+  ClassDeclaration: printClassDeclaration,
+  ClassExpression: printClassExpression,
+  ClassBody: printClassBody,
+  StaticBlock: printStaticBlock,
+  PropertyDefinition: printPropertyDefinition,
+  AccessorProperty: printPropertyDefinition,
+  MethodDefinition: printMethodDefinition,
+  Decorator: printDecorator,
+
+  ImportDeclaration: printImportDeclaration,
+  ImportExpression: printImportExpression,
+  ImportDefaultSpecifier: printImportDefaultSpecifier,
+  ImportNamespaceSpecifier: printImportNamespaceSpecifier,
+  ImportSpecifier: printImportSpecifier,
+  ExportNamedDeclaration: printExportNamedDeclaration,
+  ExportDefaultDeclaration: printExportDefaultDeclaration,
+  ExportAllDeclaration: printExportAllDeclaration,
+  ExportSpecifier: printExportSpecifier,
+
+  // TypeScript
+  TSAsExpression: printTSAsExpression,
+  TSSatisfiesExpression: printTSSatisfiesExpression,
+  TSTypeAssertion: printTSTypeAssertion,
   TSNonNullExpression: printTSNonNullExpression,
   TSTypeAnnotation: printTSTypeAnnotation,
   TSTypeAliasDeclaration: printTSTypeAliasDeclaration,
   TSInterfaceDeclaration: printTSInterfaceDeclaration,
-  // @ts-expect-error TSESTree do not have this entry
+  // TSESTree do not have this entry
   // https://github.com/sveltejs/acorn-typescript/issues/7#issuecomment-3237280163
   TSExpressionWithTypeArguments: printTSExpressionWithTypeArguments,
   TSClassImplements: printTSExpressionWithTypeArguments,
   TSInterfaceHeritage: printTSExpressionWithTypeArguments,
   TSFunctionType: printTSFunctionType,
+  TSConstructorType: printTSConstructorType,
   TSMethodSignature: printTSMethodSignature,
-  TSInterfaceBody: printTSInterfaceBody,
+  TSCallSignatureDeclaration: printTSCallSignatureDeclaration,
+  TSConstructSignatureDeclaration: printTSConstructSignatureDeclaration,
+  TSIndexSignature: printTSIndexSignature,
   TSPropertySignature: printTSPropertySignature,
   TSTypeParameterDeclaration: printTypeParameterDeclaration,
   TSTypeParameterInstantiation: printTypeParameterInstantiation,
@@ -48,8 +292,38 @@ export const defaultPrinters: Printers<unknown> = {
   TSUnionType: printJoinedTypes,
   TSIntersectionType: printJoinedTypes,
   TSArrayType: printTSArrayType,
+  TSTupleType: printTSTupleType,
+  TSNamedTupleMember: printTSNamedTupleMember,
   TSTypeLiteral: printTSTypeLiteral,
+  TSTypeOperator: printTSTypeOperator,
+  TSTypePredicate: printTSTypePredicate,
+  TSTypeQuery: printTSTypeQuery,
+  TSMappedType: printTSMappedType,
+  TSConditionalType: printTSConditionalType,
+  TSInferType: printTSInferType,
+  TSIndexedAccessType: printTSIndexedAccessType,
+  TSOptionalType: printTSOptionalType,
+  TSRestType: printTSRestType,
+  TSThisType: printTSThisType,
   TSLiteralType: printTSLiteralType,
+  TSTemplateLiteralType: printTSTemplateLiteralType,
+  TSImportType: printTSImportType,
+  TSImportEqualsDeclaration: printTSImportEqualsDeclaration,
+  TSExternalModuleReference: printTSExternalModuleReference,
+  TSEnumDeclaration: printTSEnumDeclaration,
+  TSEnumMember: printTSEnumMember,
+  TSModuleDeclaration: printTSModuleDeclaration,
+  TSModuleBlock: printTSModuleBlock,
+  TSDeclareFunction: printTSDeclareFunction,
+  TSParameterProperty: printTSParameterProperty,
+  TSAbstractMethodDefinition: printMethodDefinition,
+  TSAbstractPropertyDefinition: printPropertyDefinition,
+  TSAbstractAccessorProperty: printPropertyDefinition,
+  TSExportAssignment: printTSExportAssignment,
+  TSNamespaceExportDeclaration: printTSNamespaceExportDeclaration,
+  TSInstantiationExpression: printTSInstantiationExpression,
+  TSParenthesizedType: printTSParenthesizedType,
+  TSInterfaceBody: printTSInterfaceBody,
   TSStringKeyword: printKeywordType,
   TSNumberKeyword: printKeywordType,
   TSBooleanKeyword: printKeywordType,
@@ -62,7 +336,12 @@ export const defaultPrinters: Printers<unknown> = {
   TSObjectKeyword: printKeywordType,
   TSSymbolKeyword: printKeywordType,
   TSBigIntKeyword: printKeywordType,
+  TSIntrinsicKeyword: printKeywordType,
 };
+
+/* =============================================================================
+   JS – Statements
+   ============================================================================= */
 
 function printProgram(
   program: AST.Program,
@@ -71,39 +350,29 @@ function printProgram(
   context.writeNodeListWithSourceGaps(program.body, "\n");
 }
 
-function printIdentifier(
-  identifier: AST.Identifier,
-  context: PrinterContext<unknown>,
-): void {
-  context.write(String(identifier.name));
-  writeOptionalTypeAnnotation(identifier, context);
-}
-
-function printPrivateIdentifier(
-  identifier: AST.PrivateIdentifier,
-  context: PrinterContext<unknown>,
-): void {
-  context.write("#");
-  context.write(String(identifier.name));
-}
-
-function printLiteral(
-  literal: AST.Literal,
-  context: PrinterContext<unknown>,
-): void {
-  if (typeof literal.raw === "string") {
-    context.write(literal.raw);
-    return;
-  }
-  const literal2 = literal as AST.Literal;
-  context.write(JSON.stringify(literal2.value));
-}
-
 function printExpressionStatement(
   statement: AST.ExpressionStatement,
   context: PrinterContext<unknown>,
 ): void {
-  context.writeNode(statement.expression);
+  const expr = statement.expression;
+  if (
+    expr.type === "ObjectExpression" ||
+    expr.type === "FunctionExpression" ||
+    (expr.type === "AssignmentExpression" && expr.left.type === "ObjectPattern")
+  ) {
+    context.write("(");
+    context.writeNode(expr);
+    context.write(");");
+  } else {
+    context.writeNode(expr);
+    context.write(";");
+  }
+}
+
+function printEmptyStatement(
+  _statement: AST.EmptyStatement,
+  context: PrinterContext<unknown>,
+): void {
   context.write(";");
 }
 
@@ -160,71 +429,285 @@ function printReturnStatement(
   context.write(";");
 }
 
-function printFunctionDeclaration(
-  node: AST.FunctionDeclaration,
+function printThrowStatement(
+  statement: AST.ThrowStatement,
   context: PrinterContext<unknown>,
 ): void {
-  printFunction(node, context, true);
+  context.write("throw ");
+  if (statement.argument) {
+    context.writeNode(statement.argument);
+  }
+  context.write(";");
 }
 
-function printFunctionExpression(
-  node: AST.FunctionExpression,
+function printDebuggerStatement(
+  _statement: AST.DebuggerStatement,
   context: PrinterContext<unknown>,
 ): void {
-  printFunction(node, context, true);
+  context.write("debugger;");
 }
 
-function printFunction(
-  fn: AST.FunctionDeclaration | AST.FunctionExpression,
+function printBreakStatement(
+  statement: AST.BreakStatement,
   context: PrinterContext<unknown>,
-  includeFunctionKeyword: boolean,
 ): void {
-  if (fn.async === true) {
-    context.write("async ");
-  }
-  if (includeFunctionKeyword) {
-    context.write("function");
-    if (fn.generator === true) {
-      context.write("*");
-    }
-    if (fn.id) {
-      context.write(" ");
-      context.writeNode(fn.id);
-    }
-  }
-  if (fn.typeParameters) {
-    context.writeNode(fn.typeParameters);
-  }
-  context.write("(");
-  context.writeNodeList(fn.params, ", ");
-  context.write(")");
-  if (fn.returnType) {
-    context.writeNode(fn.returnType);
-  }
-  if (fn.body) {
+  context.write("break");
+  if (statement.label) {
     context.write(" ");
-    context.writeNode(fn.body);
+    context.writeNode(statement.label);
+  }
+  context.write(";");
+}
+
+function printContinueStatement(
+  statement: AST.ContinueStatement,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("continue");
+  if (statement.label) {
+    context.write(" ");
+    context.writeNode(statement.label);
+  }
+  context.write(";");
+}
+
+function printLabeledStatement(
+  statement: AST.LabeledStatement,
+  context: PrinterContext<unknown>,
+): void {
+  context.writeNode(statement.label);
+  context.write(": ");
+  context.writeNode(statement.body);
+}
+
+function printWhileStatement(
+  statement: AST.WhileStatement,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("while (");
+  context.writeNode(statement.test);
+  context.write(") ");
+  context.writeNode(statement.body);
+}
+
+function printDoWhileStatement(
+  statement: AST.DoWhileStatement,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("do ");
+  context.writeNode(statement.body);
+  context.write(" while (");
+  context.writeNode(statement.test);
+  context.write(");");
+}
+
+function printIfStatement(
+  statement: AST.IfStatement,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("if (");
+  context.writeNode(statement.test);
+  context.write(") ");
+  context.writeNode(statement.consequent);
+  if (statement.alternate) {
+    context.write(" else ");
+    context.writeNode(statement.alternate);
   }
 }
 
-function printArrowFunctionExpression(
-  fn: AST.ArrowFunctionExpression,
+function printForStatement(
+  statement: AST.ForStatement,
   context: PrinterContext<unknown>,
 ): void {
-  if (fn.async === true) {
-    context.write("async ");
+  context.write("for (");
+  if (statement.init) {
+    if (statement.init.type === "VariableDeclaration") {
+      printVariableDeclarationFor(statement.init, context);
+    } else {
+      context.writeNode(statement.init);
+    }
   }
-  if (fn.typeParameters) {
-    context.writeNode(fn.typeParameters);
+  context.write("; ");
+  if (statement.test) {
+    context.writeNode(statement.test);
+  }
+  context.write("; ");
+  if (statement.update) {
+    context.writeNode(statement.update);
+  }
+  context.write(") ");
+  context.writeNode(statement.body);
+}
+
+function printForInStatement(
+  statement: AST.ForInStatement,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("for (");
+  if (statement.left.type === "VariableDeclaration") {
+    printVariableDeclarationFor(statement.left, context);
+  } else {
+    context.writeNode(statement.left);
+  }
+  context.write(" in ");
+  context.writeNode(statement.right);
+  context.write(") ");
+  context.writeNode(statement.body);
+}
+
+function printForOfStatement(
+  statement: AST.ForOfStatement,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("for ");
+  if (statement.await === true) {
+    context.write("await ");
   }
   context.write("(");
-  context.writeNodeList(fn.params, ", ");
-  context.write(")");
-  if (fn.returnType) {
-    context.writeNode(fn.returnType);
+  if (statement.left.type === "VariableDeclaration") {
+    printVariableDeclarationFor(statement.left, context);
+  } else {
+    context.writeNode(statement.left);
   }
-  context.write(" => ");
-  context.writeNode(fn.body);
+  context.write(" of ");
+  context.writeNode(statement.right);
+  context.write(") ");
+  context.writeNode(statement.body);
+}
+
+function printVariableDeclarationFor(
+  declaration: AST.VariableDeclaration,
+  context: PrinterContext<unknown>,
+): void {
+  context.write(String(declaration.kind));
+  context.write(" ");
+  context.writeNodeList(declaration.declarations, ", ");
+}
+
+function printSwitchStatement(
+  statement: AST.SwitchStatement,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("switch (");
+  context.writeNode(statement.discriminant);
+  context.write(") {");
+  for (const case_ of statement.cases) {
+    context.writeNode(case_);
+  }
+  context.write("}");
+}
+
+function printSwitchCase(
+  case_: AST.SwitchCase,
+  context: PrinterContext<unknown>,
+): void {
+  if (case_.test) {
+    context.write("\ncase ");
+    context.writeNode(case_.test);
+    context.write(":");
+  } else {
+    context.write("\ndefault:");
+  }
+  for (const stmt of case_.consequent) {
+    context.write("\n");
+    context.writeNode(stmt);
+  }
+}
+
+function printTryStatement(
+  statement: AST.TryStatement,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("try ");
+  context.writeNode(statement.block);
+  if (statement.handler) {
+    context.write(" catch");
+    if (statement.handler.param) {
+      context.write(" (");
+      context.writeNode(statement.handler.param);
+      context.write(") ");
+    } else {
+      context.write(" ");
+    }
+    context.writeNode(statement.handler.body);
+  }
+  if (statement.finalizer) {
+    context.write(" finally ");
+    context.writeNode(statement.finalizer);
+  }
+}
+
+function printWithStatement(
+  statement: AST.WithStatement,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("with (");
+  context.writeNode(statement.object);
+  context.write(") ");
+  context.writeNode(statement.body);
+}
+
+/* =============================================================================
+   JS – Expressions
+   ============================================================================= */
+
+function printIdentifier(
+  identifier: AST.Identifier,
+  context: PrinterContext<unknown>,
+): void {
+  context.write(String(identifier.name));
+  writeOptionalTypeAnnotation(identifier, context);
+}
+
+function printPrivateIdentifier(
+  identifier: AST.PrivateIdentifier,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("#");
+  context.write(String(identifier.name));
+}
+
+function printLiteral(
+  literal: AST.Literal,
+  context: PrinterContext<unknown>,
+): void {
+  if (typeof literal.raw === "string") {
+    context.write(literal.raw);
+    return;
+  }
+  const l = literal as AST.Literal;
+  context.write(JSON.stringify(l.value));
+}
+
+function printUnaryExpression(
+  expr: AST.UnaryExpression,
+  context: PrinterContext<unknown>,
+): void {
+  context.write(expr.operator);
+  if (expr.operator.length > 1) {
+    context.write(" ");
+  }
+  const argPrec = EXPRESSIONS_PRECEDENCE[expr.argument.type];
+  if (argPrec != null && argPrec < EXPRESSIONS_PRECEDENCE.UnaryExpression) {
+    context.write("(");
+    context.writeNode(expr.argument);
+    context.write(")");
+  } else {
+    context.writeNode(expr.argument);
+  }
+}
+
+function printUpdateExpression(
+  expr: AST.UpdateExpression,
+  context: PrinterContext<unknown>,
+): void {
+  if (expr.prefix === true) {
+    context.write(expr.operator);
+    context.writeNode(expr.argument);
+  } else {
+    context.writeNode(expr.argument);
+    context.write(expr.operator);
+  }
 }
 
 function printBinaryExpression(
@@ -234,24 +717,141 @@ function printBinaryExpression(
     | AST.BinaryExpression,
   context: PrinterContext<unknown>,
 ): void {
-  context.writeNode(expression.left);
+  const left = expression.left;
+  const right = expression.right;
+
+  if (needsParens(left, expression, false)) {
+    context.write("(");
+    context.writeNode(left);
+    context.write(")");
+  } else {
+    context.writeNode(left);
+  }
+
   context.write(" ");
   context.write(String(expression.operator));
   context.write(" ");
-  context.writeNode(expression.right);
+
+  if (needsParens(right, expression, true)) {
+    context.write("(");
+    context.writeNode(right);
+    context.write(")");
+  } else {
+    context.writeNode(right);
+  }
+}
+
+function printConditionalExpression(
+  expr: AST.ConditionalExpression,
+  context: PrinterContext<unknown>,
+): void {
+  const testPrec = EXPRESSIONS_PRECEDENCE[expr.test.type] ?? 20;
+  if (testPrec <= EXPRESSIONS_PRECEDENCE.ConditionalExpression) {
+    context.write("(");
+    context.writeNode(expr.test);
+    context.write(")");
+  } else {
+    context.writeNode(expr.test);
+  }
+  context.write(" ? ");
+  context.writeNode(expr.consequent);
+  context.write(" : ");
+  context.writeNode(expr.alternate);
+}
+
+function printYieldExpression(
+  expr: AST.YieldExpression,
+  context: PrinterContext<unknown>,
+): void {
+  context.write(expr.delegate === true ? "yield*" : "yield");
+  if (expr.argument) {
+    context.write(" ");
+    context.writeNode(expr.argument);
+  }
+}
+
+function printAwaitExpression(
+  expr: AST.AwaitExpression,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("await");
+  if (expr.argument) {
+    const argPrec = EXPRESSIONS_PRECEDENCE[expr.argument.type];
+    if (argPrec != null && argPrec < EXPRESSIONS_PRECEDENCE.AwaitExpression) {
+      context.write(" (");
+      context.writeNode(expr.argument);
+      context.write(")");
+    } else {
+      context.write(" ");
+      context.writeNode(expr.argument);
+    }
+  }
+}
+
+function printSequenceExpression(
+  expr: AST.SequenceExpression,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("(");
+  context.writeNodeList(expr.expressions, ", ");
+  context.write(")");
 }
 
 function printCallExpression(
   expression: AST.CallExpression,
   context: PrinterContext<unknown>,
 ): void {
-  context.writeNode(expression.callee);
+  const calleePrec = EXPRESSIONS_PRECEDENCE[expression.callee.type] ?? 20;
+  if (calleePrec < EXPRESSIONS_PRECEDENCE.CallExpression) {
+    context.write("(");
+    context.writeNode(expression.callee);
+    context.write(")");
+  } else {
+    context.writeNode(expression.callee);
+  }
   if (expression.typeArguments) {
     context.writeNode(expression.typeArguments);
   }
   context.write(expression.optional === true ? "?.(" : "(");
   context.writeNodeList(expression.arguments, ", ");
   context.write(")");
+}
+
+function printNewExpression(
+  expression: AST.NewExpression,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("new ");
+  const calleePrec = EXPRESSIONS_PRECEDENCE[expression.callee.type] ?? 20;
+  if (
+    calleePrec < EXPRESSIONS_PRECEDENCE.NewExpression ||
+    hasCallExpression(expression.callee)
+  ) {
+    context.write("(");
+    context.writeNode(expression.callee);
+    context.write(")");
+  } else {
+    context.writeNode(expression.callee);
+  }
+  if (expression.typeArguments) {
+    context.writeNode(expression.typeArguments);
+  }
+  context.write("(");
+  context.writeNodeList(expression.arguments, ", ");
+  context.write(")");
+}
+
+function hasCallExpression(node: AST.Expression): boolean {
+  let cur: AST.Expression | undefined = node;
+  while (cur) {
+    if (cur.type === "CallExpression") return true;
+    if (cur.type === "MemberExpression") {
+      cur = cur.object;
+    } else {
+      return false;
+    }
+  }
+  return false;
 }
 
 function printChainExpression(
@@ -265,16 +865,22 @@ function printMemberExpression(
   expression: AST.MemberExpression,
   context: PrinterContext<unknown>,
 ): void {
-  context.writeNode(expression.object);
+  const objPrec = EXPRESSIONS_PRECEDENCE[expression.object.type] ?? 20;
+  if (objPrec < EXPRESSIONS_PRECEDENCE.MemberExpression) {
+    context.write("(");
+    context.writeNode(expression.object);
+    context.write(")");
+  } else {
+    context.writeNode(expression.object);
+  }
   if (expression.computed === true) {
     context.write(expression.optional === true ? "?.[" : "[");
     context.writeNode(expression.property);
     context.write("]");
-    return;
+  } else {
+    context.write(expression.optional === true ? "?." : ".");
+    context.writeNode(expression.property);
   }
-
-  context.write(expression.optional === true ? "?." : ".");
-  context.writeNode(expression.property);
 }
 
 function printObjectExpression(
@@ -286,24 +892,14 @@ function printObjectExpression(
   context.write(" }");
 }
 
-function printProperty(
-  property: AST.Property,
+function printObjectPattern(
+  pattern: AST.ObjectPattern,
   context: PrinterContext<unknown>,
 ): void {
-  if (property.shorthand === true) {
-    context.writeNode(property.key);
-    return;
-  }
-
-  if (property.computed === true) {
-    context.write("[");
-    context.writeNode(property.key);
-    context.write("]");
-  } else {
-    context.writeNode(property.key);
-  }
-  context.write(": ");
-  context.writeNode(property.value);
+  context.write("{ ");
+  context.writeNodeList(pattern.properties, ", ");
+  context.write(" }");
+  writeOptionalTypeAnnotation(pattern, context);
 }
 
 function printArrayExpression(
@@ -311,8 +907,78 @@ function printArrayExpression(
   context: PrinterContext<unknown>,
 ): void {
   context.write("[");
-  context.writeNodeList(array.elements as (AST.Node | null)[], ", ");
+  context.writeNodeList(array.elements, ", ");
   context.write("]");
+}
+
+function printArrayPattern(
+  pattern: AST.ArrayPattern,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("[");
+  context.writeNodeList(pattern.elements, ", ");
+  context.write("]");
+  writeOptionalTypeAnnotation(pattern, context);
+}
+
+function printProperty(
+  property: AST.Property | AST.PropertyDefinition,
+  context: PrinterContext<unknown>,
+): void {
+  if (property.type === "Property") {
+    const value = property.value;
+    const valNode = value.type === "AssignmentPattern" ? value.left : value;
+
+    const shorthand =
+      !property.computed &&
+      property.kind === "init" &&
+      property.key.type === "Identifier" &&
+      valNode.type === "Identifier" &&
+      property.key.name === valNode.name;
+
+    if (shorthand) {
+      context.writeNode(value);
+      return;
+    }
+
+    // shorthand method
+    if (value.type === "FunctionExpression") {
+      if (property.kind !== "init") {
+        context.write(property.kind + " ");
+      }
+      if (value.async === true) {
+        context.write("async ");
+      }
+      if (value.generator === true) {
+        context.write("*");
+      }
+      if (property.computed === true) {
+        context.write("[");
+        context.writeNode(property.key);
+        context.write("]");
+      } else {
+        context.writeNode(property.key);
+      }
+      printFuncParams(value, context);
+      printFuncReturnType(value, context);
+      context.write(" ");
+      context.writeNode(value.body!);
+      return;
+    }
+
+    if (property.computed === true) {
+      context.write("[");
+      context.writeNode(property.key);
+      context.write("]: ");
+    } else {
+      if (property.kind === "get" || property.kind === "set") {
+        context.write(property.kind + " ");
+      }
+      context.writeNode(property.key);
+      context.write(": ");
+    }
+    context.writeNode(property.value);
+  }
 }
 
 function printSpreadElement(
@@ -332,15 +998,580 @@ function printRestElement(
   writeOptionalTypeAnnotation(rest, context);
 }
 
-function printTypeCastExpression(
-  expression: AST.TSSatisfiesExpression | AST.TSAsExpression,
+function printAssignmentPattern(
+  pattern: AST.AssignmentPattern,
   context: PrinterContext<unknown>,
 ): void {
-  context.writeNode(expression.expression);
-  context.write(
-    expression.type === "TSSatisfiesExpression" ? " satisfies " : " as ",
-  );
+  context.writeNode(pattern.left);
+  context.write(" = ");
+  context.writeNode(pattern.right);
+}
+
+function printTemplateLiteral(
+  node: AST.TemplateLiteral,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("`");
+  const { quasis, expressions } = node;
+  for (let i = 0; i < expressions.length; i++) {
+    context.write(quasis[i].value.raw);
+    context.write("${");
+    context.writeNode(expressions[i]);
+    context.write("}");
+  }
+  context.write(quasis[quasis.length - 1].value.raw);
+  context.write("`");
+}
+
+function printTaggedTemplateExpression(
+  node: AST.TaggedTemplateExpression,
+  context: PrinterContext<unknown>,
+): void {
+  context.writeNode(node.tag);
+  context.writeNode(node.quasi);
+}
+
+function printThisExpression(
+  _node: AST.ThisExpression,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("this");
+}
+
+function printSuper(_node: AST.Super, context: PrinterContext<unknown>): void {
+  context.write("super");
+}
+
+function printMetaProperty(
+  node: AST.MetaProperty,
+  context: PrinterContext<unknown>,
+): void {
+  context.writeNode(node.meta);
+  context.write(".");
+  context.writeNode(node.property);
+}
+
+function printParenthesizedExpression(
+  node: { expression: AST.Node },
+  context: PrinterContext<unknown>,
+): void {
+  context.write("(");
+  context.writeNode(node.expression);
+  context.write(")");
+}
+
+/* =============================================================================
+   JS – Functions / Classes
+   ============================================================================= */
+
+function printFunctionDeclaration(
+  node: AST.FunctionDeclaration,
+  context: PrinterContext<unknown>,
+): void {
+  printFunction(node, context);
+}
+
+function printFunctionExpression(
+  node: AST.FunctionExpression,
+  context: PrinterContext<unknown>,
+): void {
+  printFunction(node, context);
+}
+
+function printFunction(
+  fn: AST.FunctionDeclaration | AST.FunctionExpression,
+  context: PrinterContext<unknown>,
+): void {
+  if (fn.async === true) {
+    context.write("async ");
+  }
+  context.write("function");
+  if (fn.generator === true) {
+    context.write("*");
+  }
+  if (fn.id) {
+    context.write(" ");
+    context.writeNode(fn.id);
+  }
+  if (fn.typeParameters) {
+    context.writeNode(fn.typeParameters);
+  }
+  printFuncParams(fn, context);
+  printFuncReturnType(fn, context);
+  if (fn.body) {
+    context.write(" ");
+    context.writeNode(fn.body);
+  }
+}
+
+function printArrowFunctionExpression(
+  fn: AST.ArrowFunctionExpression,
+  context: PrinterContext<unknown>,
+): void {
+  if (fn.async === true) {
+    context.write("async ");
+  }
+  if (fn.typeParameters) {
+    context.writeNode(fn.typeParameters);
+  }
+  printFuncParams(fn, context);
+  printFuncReturnType(fn, context);
+  context.write(" => ");
+  const body = fn.body;
+  if (arrowConciseBodyNeedsWrap(body)) {
+    context.write("(");
+    context.writeNode(body);
+    context.write(")");
+  } else {
+    context.writeNode(body);
+  }
+}
+
+function printClassDeclaration(
+  node: AST.ClassDeclaration,
+  context: PrinterContext<unknown>,
+): void {
+  printClass(node, context);
+}
+
+function printClassExpression(
+  node: AST.ClassExpression,
+  context: PrinterContext<unknown>,
+): void {
+  printClass(node, context);
+}
+
+function printClass(
+  node: AST.ClassDeclaration | AST.ClassExpression,
+  context: PrinterContext<unknown>,
+): void {
+  if (node.declare === true) {
+    context.write("declare ");
+  }
+  if (node.abstract === true) {
+    context.write("abstract ");
+  }
+  context.write("class ");
+  if (node.id) {
+    context.writeNode(node.id);
+    context.write(" ");
+  }
+  if (node.superClass) {
+    context.write("extends ");
+    context.writeNode(node.superClass);
+    if (node.superTypeArguments) {
+      context.writeNode(node.superTypeArguments);
+    } else if (node.superTypeParameters) {
+      context.writeNode(node.superTypeParameters);
+    }
+  }
+  if (node.implements && node.implements.length > 0) {
+    context.write(" implements ");
+    context.writeNodeList(node.implements, ", ");
+  }
+  if (node.superClass || (node.implements && node.implements.length > 0)) {
+    context.write(" ");
+  }
+  context.writeNode(node.body);
+}
+
+function printClassBody(
+  node: AST.ClassBody,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("{");
+  const body = node.body;
+  if (body.length > 0) {
+    context.write("\n");
+    context.writeNodeListWithSourceGaps(body, "\n");
+    context.write("\n");
+  }
+  context.write("}");
+}
+
+function printStaticBlock(
+  node: AST.StaticBlock,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("static {");
+  const body = node.body;
+  if (body.length > 0) {
+    context.write("\n");
+    context.writeNodeListWithSourceGaps(body, "\n");
+    context.write("\n");
+  }
+  context.write("}");
+}
+
+function printDecorator(
+  node: AST.Decorator,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("@");
+  context.writeNode(node.expression);
+  context.write("\n");
+}
+
+function printPropertyDefinition(
+  node:
+    | AST.PropertyDefinition
+    | AST.AccessorProperty
+    | AST.TSAbstractAccessorProperty
+    | AST.TSAbstractPropertyDefinition,
+  context: PrinterContext<unknown>,
+): void {
+  if (node.decorators) {
+    for (const d of node.decorators) {
+      context.writeNode(d);
+    }
+  }
+  if (node.accessibility) {
+    context.write(node.accessibility + " ");
+  }
+  if (node.static === true) {
+    context.write("static ");
+  }
+  if (node.override === true) {
+    context.write("override ");
+  }
+  if (node.readonly === true) {
+    context.write("readonly ");
+  }
+  if (
+    node.type === "TSAbstractPropertyDefinition" ||
+    ("abstract" in node && node.abstract === true)
+  ) {
+    context.write("abstract ");
+  }
+  if (
+    node.type === "AccessorProperty" ||
+    node.type === "TSAbstractAccessorProperty" ||
+    ("accessor" in node && node.accessor === true)
+  ) {
+    context.write("accessor ");
+  }
+  if (node.computed === true) {
+    context.write("[");
+    context.writeNode(node.key);
+    context.write("]");
+  } else {
+    context.writeNode(node.key);
+  }
+  if (node.typeAnnotation) {
+    if ("accessor" in node && node.accessor === true) {
+      context.writeNode(node.typeAnnotation);
+    } else {
+      context.write(": ");
+      context.writeNode(
+        node.typeAnnotation.typeAnnotation ?? node.typeAnnotation,
+      );
+    }
+  }
+  if (node.value) {
+    context.write(" = ");
+    context.writeNode(node.value);
+  }
+  context.write(";");
+}
+
+function printMethodDefinition(
+  node: AST.MethodDefinition | AST.TSAbstractMethodDefinition,
+  context: PrinterContext<unknown>,
+): void {
+  const def = node;
+  if (def.decorators) {
+    for (const d of def.decorators) {
+      context.writeNode(d);
+    }
+  }
+  if (def.accessibility) {
+    context.write(def.accessibility + " ");
+  }
+  if (def.static === true) {
+    context.write("static ");
+  }
+  if (def.override === true) {
+    context.write("override ");
+  }
+  if (
+    node.type === "TSAbstractMethodDefinition" ||
+    ("abstract" in def && def.abstract === true)
+  ) {
+    context.write("abstract ");
+  }
+  if (def.kind === "get" || def.kind === "set") {
+    context.write(def.kind + " ");
+  }
+  if (def.value.async === true) {
+    context.write("async ");
+  }
+  if (def.value.generator === true) {
+    context.write("*");
+  }
+  if (def.computed === true) {
+    context.write("[");
+    context.writeNode(def.key);
+    context.write("]");
+  } else {
+    context.writeNode(def.key);
+  }
+  printFuncParams(def.value, context);
+  printFuncReturnType(def.value, context);
+  if (def.value.body) {
+    context.write(" ");
+    context.writeNode(def.value.body);
+  } else {
+    context.write(";");
+  }
+}
+
+/* =============================================================================
+   JS – Imports / Exports
+   ============================================================================= */
+
+function printImportDeclaration(
+  node: AST.ImportDeclaration,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("import ");
+  if (node.importKind === "type") {
+    context.write("type ");
+  }
+
+  const specifiers = node.specifiers;
+  if (specifiers.length === 0) {
+    context.writeNode(node.source);
+    context.write(";");
+    return;
+  }
+
+  let wroteDefault = false;
+
+  for (const s of specifiers) {
+    if (s.type === "ImportDefaultSpecifier") {
+      context.writeNode(s.local);
+      wroteDefault = true;
+    }
+  }
+
+  let namespaceSpec: AST.ImportNamespaceSpecifier | undefined;
+  const namedSpecs: AST.ImportSpecifier[] = [];
+
+  for (const s of specifiers) {
+    if (s.type === "ImportNamespaceSpecifier") {
+      namespaceSpec = s;
+    } else if (s.type === "ImportSpecifier") {
+      namedSpecs.push(s);
+    }
+  }
+
+  if (namespaceSpec) {
+    if (wroteDefault) context.write(", ");
+    context.write("* as ");
+    context.writeNode(namespaceSpec.local);
+  }
+
+  if (namedSpecs.length > 0) {
+    if (wroteDefault || namespaceSpec) context.write(", ");
+    context.write("{ ");
+    context.writeNodeList(namedSpecs, ", ");
+    context.write(" }");
+  }
+
+  context.write(" from ");
+  context.writeNode(node.source);
+
+  if (node.attributes && node.attributes.length > 0) {
+    context.write(" with { ");
+    context.writeNodeList(node.attributes, ", ");
+    context.write(" }");
+  }
+  context.write(";");
+}
+
+function printImportExpression(
+  node: AST.ImportExpression,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("import(");
+  context.writeNode(node.source);
+  if (node.options) {
+    context.write(", ");
+    context.writeNode(node.options);
+  }
+  context.write(")");
+}
+
+function printImportDefaultSpecifier(
+  _node: AST.ImportDefaultSpecifier,
+  _context: PrinterContext<unknown>,
+): void {
+  // handled inline in ImportDeclaration
+}
+
+function printImportNamespaceSpecifier(
+  _node: AST.ImportNamespaceSpecifier,
+  _context: PrinterContext<unknown>,
+): void {
+  // handled inline in ImportDeclaration
+}
+
+function printImportSpecifier(
+  node: AST.ImportSpecifier,
+  context: PrinterContext<unknown>,
+): void {
+  if (node.importKind === "type") {
+    context.write("type ");
+  }
+  if (
+    node.local.type === "Identifier" &&
+    node.imported.type === "Identifier" &&
+    node.local.name !== node.imported.name
+  ) {
+    context.writeNode(node.imported);
+    context.write(" as ");
+  }
+  context.writeNode(node.local);
+}
+
+function printExportNamedDeclaration(
+  node: AST.ExportNamedDeclaration,
+  context: PrinterContext<unknown>,
+): void {
+  if (node.declaration) {
+    context.write("export ");
+    if (node.exportKind === "type") {
+      context.write("type ");
+    }
+    context.writeNode(node.declaration);
+    if (
+      node.declaration.type !== "FunctionDeclaration" &&
+      node.declaration.type !== "ClassDeclaration" &&
+      node.declaration.type !== "TSModuleDeclaration" &&
+      node.declaration.type !== "TSEnumDeclaration" &&
+      node.declaration.type !== "TSTypeAliasDeclaration" &&
+      node.declaration.type !== "TSInterfaceDeclaration" &&
+      node.declaration.type !== "VariableDeclaration" &&
+      node.declaration.type !== "TSDeclareFunction"
+    ) {
+      context.write(";");
+    }
+    return;
+  }
+
+  context.write("export ");
+  if (node.exportKind === "type") {
+    context.write("type ");
+  }
+  context.write("{ ");
+  context.writeNodeList(node.specifiers, ", ");
+  context.write(" }");
+
+  if (node.source) {
+    context.write(" from ");
+    context.writeNode(node.source);
+  }
+  context.write(";");
+}
+
+function printExportDefaultDeclaration(
+  node: AST.ExportDefaultDeclaration,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("export default ");
+  context.writeNode(node.declaration);
+  if (
+    node.declaration.type !== "FunctionDeclaration" &&
+    node.declaration.type !== "ClassDeclaration"
+  ) {
+    context.write(";");
+  }
+}
+
+function printExportAllDeclaration(
+  node: AST.ExportAllDeclaration,
+  context: PrinterContext<unknown>,
+): void {
+  context.write(node.exportKind === "type" ? "export type * " : "export * ");
+  if (node.exported) {
+    context.write("as ");
+    context.writeNode(node.exported);
+    context.write(" ");
+  }
+  context.write("from ");
+  context.writeNode(node.source);
+  context.write(";");
+}
+
+function printExportSpecifier(
+  node: AST.ExportSpecifier,
+  context: PrinterContext<unknown>,
+): void {
+  if (node.exportKind === "type") {
+    context.write("type ");
+  }
+  context.writeNode(node.local);
+  if (
+    node.local.type === "Identifier" &&
+    node.exported.type === "Identifier" &&
+    node.local.name !== node.exported.name
+  ) {
+    context.write(" as ");
+    context.writeNode(node.exported);
+  }
+}
+
+/* =============================================================================
+   TypeScript – Expressions
+   ============================================================================= */
+
+function printTSAsExpression(
+  expression: AST.TSAsExpression,
+  context: PrinterContext<unknown>,
+): void {
+  const exprPrec = EXPRESSIONS_PRECEDENCE[expression.expression.type] ?? 20;
+  if (exprPrec < EXPRESSIONS_PRECEDENCE.TSAsExpression) {
+    context.write("(");
+    context.writeNode(expression.expression);
+    context.write(")");
+  } else {
+    context.writeNode(expression.expression);
+  }
+  context.write(" as ");
   context.writeNode(expression.typeAnnotation);
+}
+
+function printTSSatisfiesExpression(
+  expression: AST.TSSatisfiesExpression,
+  context: PrinterContext<unknown>,
+): void {
+  const exprPrec = EXPRESSIONS_PRECEDENCE[expression.expression.type] ?? 20;
+  if (exprPrec < EXPRESSIONS_PRECEDENCE.TSSatisfiesExpression) {
+    context.write("(");
+    context.writeNode(expression.expression);
+    context.write(")");
+  } else {
+    context.writeNode(expression.expression);
+  }
+  context.write(" satisfies ");
+  context.writeNode(expression.typeAnnotation);
+}
+
+function printTSTypeAssertion(
+  expression: AST.TSTypeAssertion,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("<");
+  context.writeNode(expression.typeAnnotation);
+  context.write(">");
+  const exprPrec = EXPRESSIONS_PRECEDENCE[expression.expression.type] ?? 20;
+  if (exprPrec < EXPRESSIONS_PRECEDENCE.TSTypeAssertion) {
+    context.write("(");
+    context.writeNode(expression.expression);
+    context.write(")");
+  } else {
+    context.writeNode(expression.expression);
+  }
 }
 
 function printTSNonNullExpression(
@@ -506,8 +1737,6 @@ function printTSFunctionType(
 ): void {
   if (type.typeParameters) {
     context.writeNode(type.typeParameters);
-  } else if (type.typeAnnotation) {
-    context.writeNode(type.typeAnnotation.typeAnnotation);
   }
   context.write("(");
   if (type.params) {
@@ -516,8 +1745,34 @@ function printTSFunctionType(
     context.writeNodeList(type.parameters, ", ");
   }
   context.write(")");
+  context.write(" => ");
   if (type.returnType) {
     context.writeNode(type.returnType);
+  } else if (type.typeAnnotation) {
+    context.writeNode(type.typeAnnotation.typeAnnotation);
+  }
+}
+
+function printTSConstructorType(
+  type: AST.TSConstructorType,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("new ");
+  if (type.typeParameters) {
+    context.writeNode(type.typeParameters);
+  }
+  context.write("(");
+  if (type.params) {
+    context.writeNodeList(type.params, ", ");
+  } else if (type.parameters) {
+    context.writeNodeList(type.parameters, ", ");
+  }
+  context.write(")");
+  context.write(" => ");
+  if (type.returnType) {
+    context.writeNode(type.returnType);
+  } else if (type.typeAnnotation) {
+    context.writeNode(type.typeAnnotation.typeAnnotation);
   }
 }
 
@@ -540,8 +1795,6 @@ function printTSMethodSignature(
   }
   if (signature.typeParameters) {
     context.writeNode(signature.typeParameters);
-  } else if (signature.typeAnnotation) {
-    context.writeNode(signature.typeAnnotation.typeAnnotation);
   }
   context.write("(");
   if (signature.params) {
@@ -550,10 +1803,69 @@ function printTSMethodSignature(
     context.writeNodeList(signature.parameters, ", ");
   }
   context.write(")");
+  if (signature.returnType) {
+    context.writeNode(signature.returnType);
+  } else if (signature.typeAnnotation) {
+    context.writeNode(signature.typeAnnotation.typeAnnotation);
+  } 
+  context.write(";");
+}
+
+function printTSCallSignatureDeclaration(
+  signature: AST.TSCallSignatureDeclaration,
+  context: PrinterContext<unknown>,
+): void {
+  if (signature.typeParameters) {
+    context.writeNode(signature.typeParameters);
+  }
+  context.write("(");
+  if (signature.params) {
+    context.writeNodeList(signature.params, ", ");
+  } else if (signature.parameters) {
+    context.writeNodeList(signature.parameters, ", ");
+  }
+  context.write(")");
+  if (signature.returnType) {
+    context.writeNode(signature.returnType);
+  } else if (signature.typeAnnotation) {
+    context.writeNode(signature.typeAnnotation.typeAnnotation);
+  } 
+}
+
+function printTSConstructSignatureDeclaration(
+  signature: AST.TSConstructSignatureDeclaration,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("new");
+  if (signature.typeParameters) {
+    context.writeNode(signature.typeParameters);
+  }
+  context.write("(");
+  if (signature.params) {
+    context.writeNodeList(signature.params, ", ");
+  } else if (signature.parameters) {
+    context.writeNodeList(signature.parameters, ", ");
+  }
+  context.write(")");
+  if (signature.returnType) {
+    context.writeNode(signature.returnType);
+  } else if (signature.typeAnnotation) {
+    context.writeNode(signature.typeAnnotation.typeAnnotation);
+  } 
+}
+
+function printTSIndexSignature(
+  signature: AST.TSIndexSignature,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("[");
+  if (signature.parameters) {
+    context.writeNodeList(signature.parameters, ", ");
+  }
+  context.write("]");
   if (signature.typeAnnotation) {
     context.writeNode(signature.typeAnnotation);
   }
-  context.write(";");
 }
 
 function printTSTypeReference(
@@ -593,6 +1905,24 @@ function printTSArrayType(
   context.write("[]");
 }
 
+function printTSTupleType(
+  node: AST.TSTupleType,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("[");
+  context.writeNodeList(node.elementTypes, ", ");
+  context.write("]");
+}
+
+function printTSNamedTupleMember(
+  node: AST.TSNamedTupleMember,
+  context: PrinterContext<unknown>,
+): void {
+  context.writeNode(node.label);
+  context.write(": ");
+  context.writeNode(node.elementType);
+}
+
 function printTSTypeLiteral(
   literal: AST.TSTypeLiteral,
   context: PrinterContext<unknown>,
@@ -602,11 +1932,315 @@ function printTSTypeLiteral(
   context.write(" }");
 }
 
+function printTSTypeOperator(
+  node: AST.TSTypeOperator,
+  context: PrinterContext<unknown>,
+): void {
+  context.write(node.operator + " ");
+  if (node.typeAnnotation) {
+    context.writeNode(node.typeAnnotation);
+  }
+}
+
+function printTSTypePredicate(
+  node: AST.TSTypePredicate,
+  context: PrinterContext<unknown>,
+): void {
+  if (node.parameterName) {
+    context.writeNode(node.parameterName);
+  } else if (node.typeAnnotation) {
+    context.writeNode(node.typeAnnotation);
+  }
+  if (node.asserts === true) {
+    context.write(" asserts ");
+  } else {
+    context.write(" is ");
+  }
+  if (node.typeAnnotation) {
+    context.writeNode(
+      node.typeAnnotation.typeAnnotation ?? node.typeAnnotation,
+    );
+  }
+}
+
+function printTSTypeQuery(
+  node: AST.TSTypeQuery,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("typeof ");
+  context.writeNode(node.exprName);
+}
+
+function printTSMappedType(
+  node: AST.TSMappedType,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("{ [");
+  const legacyTp = node.typeParameter;
+  const key = node.key ?? legacyTp?.name;
+  const constraint = node.constraint ?? legacyTp?.constraint;
+
+  if (key) {
+    if (typeof key === "string") {
+      context.write(key);
+    } else {
+      context.writeNode(key);
+    }
+  }
+  if (constraint) {
+    context.write(" in ");
+    context.writeNode(constraint);
+  }
+  context.write("]");
+  if (node.typeAnnotation) {
+    context.write(": ");
+    context.writeNode(node.typeAnnotation);
+  }
+  context.write(" }");
+}
+
+function printTSConditionalType(
+  node: AST.TSConditionalType,
+  context: PrinterContext<unknown>,
+): void {
+  context.writeNode(node.checkType);
+  context.write(" extends ");
+  context.writeNode(node.extendsType);
+  context.write(" ? ");
+  context.writeNode(node.trueType);
+  context.write(" : ");
+  context.writeNode(node.falseType);
+}
+
+function printTSInferType(
+  node: AST.TSInferType,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("infer ");
+  context.writeNode(node.typeParameter);
+}
+
+function printTSIndexedAccessType(
+  node: AST.TSIndexedAccessType,
+  context: PrinterContext<unknown>,
+): void {
+  context.writeNode(node.objectType);
+  context.write("[");
+  context.writeNode(node.indexType);
+  context.write("]");
+}
+
+function printTSOptionalType(
+  node: AST.TSOptionalType,
+  context: PrinterContext<unknown>,
+): void {
+  context.writeNode(node.typeAnnotation);
+  context.write("?");
+}
+
+function printTSRestType(
+  node: AST.TSRestType,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("...");
+  context.writeNode(node.typeAnnotation);
+}
+
+function printTSThisType(
+  _node: AST.TSThisType,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("this");
+}
+
 function printTSLiteralType(
   literal: AST.TSLiteralType,
   context: PrinterContext<unknown>,
 ): void {
   context.writeNode(literal.literal);
+}
+
+function printTSTemplateLiteralType(
+  node: AST.TSTemplateLiteralType,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("`");
+  const { quasis, types } = node;
+  for (let i = 0; i < types.length; i++) {
+    context.write(quasis[i].value.raw);
+    context.write("${");
+    context.writeNode(types[i]);
+    context.write("}");
+  }
+  context.write(quasis[quasis.length - 1].value.raw);
+  context.write("`");
+}
+
+function printTSImportType(
+  node: AST.TSImportType,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("import(");
+  context.writeNode(node.argument);
+  context.write(")");
+  if (node.qualifier) {
+    context.write(".");
+    context.writeNode(node.qualifier);
+  }
+}
+
+function printTSImportEqualsDeclaration(
+  node: AST.TSImportEqualsDeclaration,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("import ");
+  context.writeNode(node.id);
+  context.write(" = ");
+  context.writeNode(node.moduleReference);
+  context.write(";");
+}
+
+function printTSExternalModuleReference(
+  node: AST.TSExternalModuleReference,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("require(");
+  context.writeNode(node.expression);
+  context.write(")");
+}
+
+function printTSEnumDeclaration(
+  node: AST.TSEnumDeclaration,
+  context: PrinterContext<unknown>,
+): void {
+  if (node.declare === true) {
+    context.write("declare ");
+  }
+  const isConst = node.const === true;
+  if (isConst) {
+    context.write("const ");
+  }
+  context.write("enum ");
+  context.writeNode(node.id);
+  context.write(" { ");
+  context.writeNodeList(node.members, ", ");
+  context.write(" }");
+}
+
+function printTSEnumMember(
+  node: AST.TSEnumMember,
+  context: PrinterContext<unknown>,
+): void {
+  context.writeNode(node.id);
+  if (node.initializer) {
+    context.write(" = ");
+    context.writeNode(node.initializer);
+  }
+}
+
+function printTSModuleDeclaration(
+  node: AST.TSModuleDeclaration,
+  context: PrinterContext<unknown>,
+): void {
+  if (node.declare === true) {
+    context.write("declare ");
+  }
+  if (node.global === true) {
+    context.write("global");
+  } else {
+    const kind =
+      (node as AST.TSModuleDeclaration).kind ??
+      (node.id && node.id.type === "Literal" ? "module" : "namespace");
+    context.write(String(kind) + " ");
+    context.writeNode(node.id);
+  }
+  if (node.body) {
+    if (node.body.type === "TSModuleBlock") {
+      context.write(" ");
+    }
+    context.writeNode(node.body);
+  }
+}
+
+function printTSModuleBlock(
+  node: AST.TSModuleBlock,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("{\n");
+  context.writeNodeListWithSourceGaps(node.body, "\n");
+  context.write("\n}");
+}
+
+function printTSDeclareFunction(
+  node: AST.TSDeclareFunction,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("declare ");
+  if (node.async === true) {
+    context.write("async ");
+  }
+  context.write("function");
+  if ((node.generator as boolean) === true) {
+    context.write("*");
+  }
+  if (node.id) {
+    context.write(" ");
+    context.writeNode(node.id);
+  }
+  if (node.typeParameters) {
+    context.writeNode(node.typeParameters);
+  }
+  printFuncParams(node, context);
+  printFuncReturnType(node, context);
+  context.write(";");
+}
+
+function printTSParameterProperty(
+  node: AST.TSParameterProperty,
+  context: PrinterContext<unknown>,
+): void {
+  if (node.accessibility) {
+    context.write(node.accessibility + " ");
+  }
+  if (node.readonly === true) {
+    context.write("readonly ");
+  }
+  context.writeNode(node.parameter);
+}
+
+function printTSExportAssignment(
+  node: AST.TSExportAssignment,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("export = ");
+  context.writeNode(node.expression);
+  context.write(";");
+}
+
+function printTSNamespaceExportDeclaration(
+  node: AST.TSNamespaceExportDeclaration,
+  context: PrinterContext<unknown>,
+): void {
+  context.write("export as namespace ");
+  context.writeNode(node.id);
+  context.write(";");
+}
+
+function printTSInstantiationExpression(
+  node: { expression: AST.Node; typeArguments: AST.Node },
+  context: PrinterContext<unknown>,
+): void {
+  context.writeNode(node.expression);
+  context.writeNode(node.typeArguments);
+}
+
+function printTSParenthesizedType(
+  node: { typeAnnotation: AST.Node },
+  context: PrinterContext<unknown>,
+): void {
+  context.write("(");
+  context.writeNode(node.typeAnnotation);
+  context.write(")");
 }
 
 function printKeywordType(
@@ -617,8 +2251,12 @@ function printKeywordType(
   context.write(keyword);
 }
 
+/* =============================================================================
+   Shared helpers
+   ============================================================================= */
+
 function writeOptionalTypeAnnotation(
-  node: { optional?: boolean; typeAnnotation?: AST.Node },
+  node: { optional?: boolean; typeAnnotation?: AST.Node | null },
   context: PrinterContext<unknown>,
 ): void {
   if (node.optional === true) {

@@ -296,4 +296,205 @@ describe("print", () => {
       "Literal",
     ]);
   });
+
+  it("structurally prints precedence-aware binary and logical expressions", () => {
+    const source = "const x = a + b * c;";
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe("const x = a + b * c;");
+  });
+
+  it("structurally prints arrow concise body wrapping", () => {
+    const source = "const fn = () => ({ x: 1 } as const);";
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe("const fn = () => ({ x: 1 } as const);");
+  });
+
+  it("structurally prints expression statement wrapping for objects", () => {
+    const source = "({ x: 1 });";
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe("({ x: 1 });");
+  });
+
+  it("structurally prints conditional and sequence expressions", () => {
+    const source = "const x = a > b ? c : (d, e);";
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe("const x = a > b ? c : (d, e);");
+  });
+
+  it("structurally prints loops and branches", () => {
+    const source = [
+      "function f() {",
+      "if (x) return y; else if (z) throw e;",
+      "for (let i = 0; i < 10; i++) break;",
+      "for (const x of arr) continue;",
+      "while (true) debugger;",
+      "do {} while (cond);",
+      "}",
+    ].join("\n");
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe(source);
+  });
+
+  it("structurally prints switch and try statements", () => {
+    const source = [
+      "switch (x) {",
+      "case 1:",
+      "a;",
+      "default:",
+      "b;}",
+      "try {",
+      "c;",
+      "} catch (e) {",
+      "d;",
+      "} finally {",
+      "e;",
+      "}",
+    ].join("\n");
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe(source);
+  });
+
+  it("structurally prints class declarations and expressions", () => {
+    const source = [
+      "class Base {}",
+      "class Child extends Base<T> implements I {}",
+      "const cls = class extends Base {};",
+    ].join("\n");
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe(source);
+  });
+
+  it("structurally prints template literals", () => {
+    const source = "const msg = `hello ${name}`;";
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe("const msg = `hello ${name}`;");
+  });
+
+  it("structurally prints import and export declarations", () => {
+    const source = [
+      "import { x } from 'a';",
+      "export { y } from 'b';",
+      "export default z;",
+      "export * from 'c';",
+    ].join("\n");
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe(source);
+  });
+
+  it("structurally prints TS type assertions and non-null", () => {
+    const source = "const x = a as T; const y = b!;";
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe("const x = a as T; const y = b!;");
+  });
+
+  it("structurally prints TS advanced types", () => {
+    const source = [
+      "type A = [string, number, ...boolean[]];",
+      "type B = T[K];",
+      "type C = T extends U ? V : W;",
+      "type D = { [K in keyof T]: T[K] };",
+      "type E = infer R;",
+      "type F = typeof x;",
+    ].join("\n");
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe(source);
+  });
+
+  it("structurally prints TS enum and module declarations", () => {
+    const source = [
+      "enum Color { Red, Green = 3 }",
+      "declare module 'x' {",
+      "export const a: number;",
+      "}",
+      "namespace N {",
+      "export const b = 1;",
+      "}",
+    ].join("\n");
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe(source);
+  });
+
+  it("structurally prints TS function and constructor types", () => {
+    const source = [
+      "type F = (x: number) => string;",
+      "type C = new (x: number) => T;",
+    ].join("\n");
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe(source);
+  });
+
+  it("structurally prints TS template literal and import types", () => {
+    const source = [
+      "type T = `prefix-${string}-suffix`;",
+      "type I = import('a').X;",
+    ].join("\n");
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe(source);
+  });
+
+  it("structurally prints new expression", () => {
+    const source = "const x = new Foo(1);";
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe("const x = new Foo(1);");
+  });
 });
