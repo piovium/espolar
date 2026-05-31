@@ -1,7 +1,6 @@
 import type { PrinterContext, Printers } from "./api.ts";
 import type { AST } from "./types.ts";
 
-// Precedence tables (matching esrap)
 const EXPRESSIONS_PRECEDENCE: Record<string, number> = {
   ArrayPattern: 20,
   ObjectPattern: 20,
@@ -67,7 +66,6 @@ const OPERATOR_PRECEDENCE: Record<string, number> = {
   "**": 13,
 };
 
-// Helper functions (matching esrap semantics)
 function needsParens(
   node: AST.Expression | AST.PrivateIdentifier,
   parent:
