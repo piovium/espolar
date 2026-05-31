@@ -62,11 +62,9 @@ import { print } from "espolar";
 
 const result = print(ast, {
   source,
-  getMappingData: (node) => (node ? { type: node.type } : {}),
+  getMappingData: (node) => (node ? [node.type] : []),
   combineMappingData: (left, right) => {
-    return {
-      types: [...(left.types ?? [left.type]), ...(right.types ?? [right.type])],
-    };
+    return [...left, right];
   },
 });
 ```
