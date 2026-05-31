@@ -8,4 +8,4 @@ declare module "@typescript-eslint/types" {
 }
 
 export { TSESTree as AST } from "@typescript-eslint/types";
-export type { TSESTree } from "@typescript-eslint/types";
+export type { AST_NODE_TYPES } from "@typescript-eslint/types";
