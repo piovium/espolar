@@ -497,4 +497,395 @@ describe("print", () => {
     });
     expect(result.code).toBe("const x = new Foo(1);");
   });
+
+  it("structurally prints yield, await, update expressions", () => {
+    const source = [
+      "async function* gen() {",
+      "yield 1;",
+      "yield* iter;",
+      "await p;",
+      "}",
+      "function f() {",
+      "let i = 0;",
+      "i++;",
+      "--i;",
+      "}",
+    ].join("\n");
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe(source);
+  });
+
+  it("structurally prints for-in, empty, and labeled statements", () => {
+    const source = [
+      "function f(obj: any) {",
+      "for (const x in obj) i++;",
+      ";",
+      "label: x++;",
+      "}",
+    ].join("\n");
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe(source);
+  });
+
+  it("structurally prints class members and this-type", () => {
+    const source = [
+      "class C extends B {",
+      "static x = 1;",
+      "private y: number;",
+      "constructor() {",
+      "super();",
+      "}",
+      "method(): this {",
+      "return this;",
+      "}",
+      "get z() {",
+      "return 0;",
+      "}",
+      "set z(v) {}",
+      "}",
+    ].join("\n");
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe(source);
+  });
+
+  it("structurally prints assignment pattern and tagged template", () => {
+    const source = [
+      "function f(x = 1) {}",
+      "const msg = tag`hello ${name}`;",
+    ].join("\n");
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe(source);
+  });
+
+  it("structurally prints import specifiers and dynamic import", () => {
+    const source = [
+      "import x, { y as z } from 'a';",
+      "import * as ns from 'b';",
+      "import type { T } from 'c';",
+      "const m = import('d');",
+    ].join("\n");
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe(source);
+  });
+
+  it("structurally prints TS index, call, construct signatures", () => {
+    const source = "interface I { [key: string]: number; (x: number): string; new (x: number): I; }";
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe(source);
+  });
+
+  it("structurally prints TS type operator, predicate, and indexed access", () => {
+    const source = [
+      "type K = keyof T;",
+      "type U = unique symbol;",
+      "function isString(x: unknown): x is string {",
+      "return true;",
+      "}",
+      "type V = T[K];",
+    ].join("\n");
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe(source);
+  });
+
+  it("structurally prints TS optional, rest, this, readonly parameter", () => {
+    const source = [
+      "type O = [string?];",
+      "type R = [...number[]];",
+      "function f(this: void) {}",
+      "class C {",
+      "constructor(readonly x: number) {}",
+      "}",
+      "declare function g(): void;",
+    ].join("\n");
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe(source);
+  });
+
+  it("structurally prints TS import equals, namespace export, export assignment", () => {
+    const source = [
+      "import X = require('x');",
+      "export = expr;",
+      "export as namespace NS;",
+    ].join("\n");
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe(source);
+  });
+
+  it("structurally prints parenthesized expression and conditional precedence", () => {
+    const source = "const x = (a = b) ? c : d;";
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe("const x = (a = b) ? c : d;");
+  });
+
+  it("structurally prints abstract class, accessibility modifiers, declare class", () => {
+    const source = [
+      "abstract class A {",
+      "abstract method(): void;",
+      "public x: number;",
+      "protected readonly y: string;",
+      "}",
+      "declare class B {}",
+    ].join("\n");
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe(source);
+  });
+
+  it("structurally prints parameter property with accessibility", () => {
+    const source = "class C { constructor(public readonly x: number) {} }";
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe(
+      [
+        "class C {",
+        "constructor(public readonly x: number) {}",
+        "}",
+      ].join("\n"),
+    );
+  });
+
+  it("structurally prints optional identifiers and call chain precedence", () => {
+    const source = "const fn = (x?: number) => new Foo(x).bar?.();";
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe("const fn = (x?: number) => new Foo(x).bar?.();");
+  });
+
+  it("structurally prints declare function variants", () => {
+    const source = [
+      "declare function f(): void;",
+      "declare function g<T>(x: T): T;",
+    ].join("\n");
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe(source);
+  });
+
+  it("structurally prints logical ?? and binary ** precedence parens", () => {
+    const source = "const x = (a ?? b) && c; const y = (a ** b) ** c;";
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe("const x = (a ?? b) && c; const y = (a ** b) ** c;");
+  });
+
+  it("structurally prints as/satisfies/non-null expression precedence", () => {
+    const source = "const x = a = b as T;";
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe("const x = a = b as T;");
+  });
+
+  it("structurally prints unary and await precedence parens", () => {
+    const source = [
+      "async function f() {",
+      "await (a ?? b);",
+      "}",
+      "const x = !a as T;",
+    ].join("\n");
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe(source);
+  });
+
+  it("structurally prints decorators and keyword type", () => {
+    const source = "class C { @dec x: boolean = true; }";
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe(
+      [
+        "class C {",
+        "@dec",
+        "x: boolean = true;",
+        "}",
+      ].join("\n"),
+    );
+  });
+
+  it("structurally prints declare async function", () => {
+    // construct MANUALLY since TS parser doesn't produce async on declare functions
+    const node = {
+      type: "TSDeclareFunction",
+      async: true,
+      generator: true,
+      id: { type: "Identifier", name: "f" },
+      typeParameters: {
+        type: "TSTypeParameterDeclaration",
+        params: [{ type: "TSTypeParameter", name: "T", constraint: null, default: null }],
+      },
+      params: [],
+      returnType: null,
+    } as unknown as AST.Node;
+    const result = print(node, {
+      source: "",
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe("declare async function* f<T>();");
+  });
+
+  it("structurally prints TSExternalModuleReference manually", () => {
+    const program = {
+      type: "Program",
+      body: [{
+        type: "TSImportEqualsDeclaration",
+        id: { type: "Identifier", name: "X" },
+        moduleReference: {
+          type: "TSExternalModuleReference",
+          expression: { type: "Literal", value: "mod", raw: "'mod'" },
+        },
+      }],
+    } as unknown as AST.Node;
+    const result = print(program, {
+      source: "",
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe("import X = require('mod');");
+  });
+
+  it("structurally prints const enum and declare global", () => {
+    const source = [
+      "const enum E { A, B }",
+      "declare enum F { X }",
+      "declare global {",
+      "var x: number;",
+      "}",
+    ].join("\n");
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe(source);
+  });
+
+  it("prints synthetic TS instantiation and parenthesized type nodes", () => {
+    const result = print(
+      {
+        type: "TSInstantiationExpression",
+        expression: { type: "Identifier", name: "Foo" },
+        typeArguments: {
+          type: "TSTypeParameterInstantiation",
+          params: [{ type: "TSTypeReference", typeName: { type: "Identifier", name: "Bar" } }],
+        },
+      } as unknown as AST.Node,
+      {
+        source: "",
+        isUntouched: () => false,
+      },
+    );
+    expect(result.code).toBe("Foo<Bar>");
+
+    const result2 = print(
+      {
+        type: "TSParenthesizedType",
+        typeAnnotation: { type: "TSUnionType", types: [{ type: "TSStringKeyword" }, { type: "TSNumberKeyword" }] },
+      } as unknown as AST.Node,
+      {
+        source: "",
+        isUntouched: () => false,
+      },
+    );
+    expect(result2.code).toBe("(string | number)");
+  });
+
+  it("prints declaration with source gap preservation", () => {
+    const source = "const a = 1;\nconst b = 2;\nconst c = 3;";
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: (node) => node.type !== "Program",
+    });
+    expect(result.code).toBe(source);
+  });
+
+  it("structurally prints asserts type predicate", () => {
+    const source = "function assert(cond: unknown): asserts cond is string {}";
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe("function assert(cond: unknown): asserts cond is string {}");
+  });
+
+  it("prints synthetic TSTemplateLiteralType", () => {
+    const node = {
+      type: "TSTemplateLiteralType",
+      quasis: [
+        { value: { raw: "prefix-" } },
+        { value: { raw: "-suffix" } },
+      ],
+      types: [
+        { type: "TSStringKeyword" },
+      ],
+    } as unknown as AST.Node;
+    const result = print(node, {
+      source: "",
+      isUntouched: () => false,
+    });
+    expect(result.code).toBe("`prefix-${string}-suffix`");
+  });
 });

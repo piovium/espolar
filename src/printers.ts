@@ -1,10 +1,7 @@
 import type { PrinterContext, Printers } from "./api.ts";
 import type { AST } from "./types.ts";
 
-/* -----------------------------------------------------------------------------
-   Precedence tables (matching esrap)
-   ----------------------------------------------------------------------------- */
-
+// Precedence tables (matching esrap)
 const EXPRESSIONS_PRECEDENCE: Record<string, number> = {
   ArrayPattern: 20,
   ObjectPattern: 20,
@@ -30,9 +27,9 @@ const EXPRESSIONS_PRECEDENCE: Record<string, number> = {
   ClassExpression: 17,
   FunctionExpression: 17,
   ObjectExpression: 17,
-  TSAsExpression: 16,
+  UnaryExpression: 16,
   UpdateExpression: 16,
-  UnaryExpression: 15,
+  TSAsExpression: 15,
   BinaryExpression: 14,
   LogicalExpression: 13,
   ConditionalExpression: 4,
@@ -70,13 +67,13 @@ const OPERATOR_PRECEDENCE: Record<string, number> = {
   "**": 13,
 };
 
-/* -----------------------------------------------------------------------------
-   Helper functions (matching esrap semantics)
-   ----------------------------------------------------------------------------- */
-
+// Helper functions (matching esrap semantics)
 function needsParens(
   node: AST.Expression | AST.PrivateIdentifier,
-  parent: AST.BinaryExpression | AST.LogicalExpression | AST.AssignmentExpression,
+  parent:
+    | AST.BinaryExpression
+    | AST.LogicalExpression
+    | AST.AssignmentExpression,
   isRight: boolean,
 ): boolean {
   if (
@@ -164,30 +161,7 @@ type FuncLike = {
   body?: AST.BlockStatement | AST.Expression | null;
 };
 
-function printFuncParams(
-  node: FuncLike,
-  context: PrinterContext<unknown>,
-): void {
-  context.write("(");
-  const params = node.params ?? node.parameters ?? [];
-  context.writeNodeList(params, ", ");
-  context.write(")");
-}
-
-function printFuncReturnType(
-  node: FuncLike,
-  context: PrinterContext<unknown>,
-): void {
-  const ret = node.returnType ?? node.typeAnnotation;
-  if (ret) {
-    context.writeNode(ret);
-  }
-}
-
-/* -----------------------------------------------------------------------------
-   Printers
-   ----------------------------------------------------------------------------- */
-
+// Printers
 export const defaultPrinters: Printers<unknown> = {
   Program: printProgram,
   Identifier: printIdentifier,
@@ -256,8 +230,6 @@ export const defaultPrinters: Printers<unknown> = {
 
   ImportDeclaration: printImportDeclaration,
   ImportExpression: printImportExpression,
-  ImportDefaultSpecifier: printImportDefaultSpecifier,
-  ImportNamespaceSpecifier: printImportNamespaceSpecifier,
   ImportSpecifier: printImportSpecifier,
   ExportNamedDeclaration: printExportNamedDeclaration,
   ExportDefaultDeclaration: printExportDefaultDeclaration,
@@ -959,8 +931,10 @@ function printProperty(
       } else {
         context.writeNode(property.key);
       }
-      printFuncParams(value, context);
-      printFuncReturnType(value, context);
+      context.write("(");
+      context.writeNodeList(value.params, ", ");
+      context.write(")");
+      writeReturnType(value, context);
       context.write(" ");
       context.writeNode(value.body!);
       return;
@@ -1096,8 +1070,10 @@ function printFunction(
   if (fn.typeParameters) {
     context.writeNode(fn.typeParameters);
   }
-  printFuncParams(fn, context);
-  printFuncReturnType(fn, context);
+  context.write("(");
+  context.writeNodeList(fn.params, ", ");
+  context.write(")");
+  writeReturnType(fn, context);
   if (fn.body) {
     context.write(" ");
     context.writeNode(fn.body);
@@ -1114,8 +1090,10 @@ function printArrowFunctionExpression(
   if (fn.typeParameters) {
     context.writeNode(fn.typeParameters);
   }
-  printFuncParams(fn, context);
-  printFuncReturnType(fn, context);
+  context.write("(");
+  context.writeNodeList(fn.params, ", ");
+  context.write(")");
+  writeReturnType(fn, context);
   context.write(" => ");
   const body = fn.body;
   if (arrowConciseBodyNeedsWrap(body)) {
@@ -1315,8 +1293,10 @@ function printMethodDefinition(
   } else {
     context.writeNode(def.key);
   }
-  printFuncParams(def.value, context);
-  printFuncReturnType(def.value, context);
+  context.write("(");
+  context.writeNodeList(def.value.params, ", ");
+  context.write(")");
+  writeReturnType(def.value, context);
   if (def.value.body) {
     context.write(" ");
     context.writeNode(def.value.body);
@@ -1400,20 +1380,6 @@ function printImportExpression(
     context.writeNode(node.options);
   }
   context.write(")");
-}
-
-function printImportDefaultSpecifier(
-  _node: AST.ImportDefaultSpecifier,
-  _context: PrinterContext<unknown>,
-): void {
-  // handled inline in ImportDeclaration
-}
-
-function printImportNamespaceSpecifier(
-  _node: AST.ImportNamespaceSpecifier,
-  _context: PrinterContext<unknown>,
-): void {
-  // handled inline in ImportDeclaration
 }
 
 function printImportSpecifier(
@@ -1746,11 +1712,7 @@ function printTSFunctionType(
   }
   context.write(")");
   context.write(" => ");
-  if (type.returnType) {
-    context.writeNode(type.returnType);
-  } else if (type.typeAnnotation) {
-    context.writeNode(type.typeAnnotation.typeAnnotation);
-  }
+  writeReturnType(type, context, { tsArrowType: true });
 }
 
 function printTSConstructorType(
@@ -1769,11 +1731,7 @@ function printTSConstructorType(
   }
   context.write(")");
   context.write(" => ");
-  if (type.returnType) {
-    context.writeNode(type.returnType);
-  } else if (type.typeAnnotation) {
-    context.writeNode(type.typeAnnotation.typeAnnotation);
-  }
+  writeReturnType(type, context, { tsArrowType: true });
 }
 
 function printTSMethodSignature(
@@ -1803,11 +1761,7 @@ function printTSMethodSignature(
     context.writeNodeList(signature.parameters, ", ");
   }
   context.write(")");
-  if (signature.returnType) {
-    context.writeNode(signature.returnType);
-  } else if (signature.typeAnnotation) {
-    context.writeNode(signature.typeAnnotation.typeAnnotation);
-  } 
+  writeReturnType(signature, context);
   context.write(";");
 }
 
@@ -1825,18 +1779,15 @@ function printTSCallSignatureDeclaration(
     context.writeNodeList(signature.parameters, ", ");
   }
   context.write(")");
-  if (signature.returnType) {
-    context.writeNode(signature.returnType);
-  } else if (signature.typeAnnotation) {
-    context.writeNode(signature.typeAnnotation.typeAnnotation);
-  } 
+  writeReturnType(signature, context);
+  context.write(";");
 }
 
 function printTSConstructSignatureDeclaration(
   signature: AST.TSConstructSignatureDeclaration,
   context: PrinterContext<unknown>,
 ): void {
-  context.write("new");
+  context.write("new ");
   if (signature.typeParameters) {
     context.writeNode(signature.typeParameters);
   }
@@ -1847,11 +1798,8 @@ function printTSConstructSignatureDeclaration(
     context.writeNodeList(signature.parameters, ", ");
   }
   context.write(")");
-  if (signature.returnType) {
-    context.writeNode(signature.returnType);
-  } else if (signature.typeAnnotation) {
-    context.writeNode(signature.typeAnnotation.typeAnnotation);
-  } 
+  writeReturnType(signature, context);
+  context.write(";");
 }
 
 function printTSIndexSignature(
@@ -1863,8 +1811,26 @@ function printTSIndexSignature(
     context.writeNodeList(signature.parameters, ", ");
   }
   context.write("]");
-  if (signature.typeAnnotation) {
-    context.writeNode(signature.typeAnnotation);
+  writeReturnType(signature, context);
+  context.write(";");
+}
+
+function writeReturnType(
+  node: {
+    returnType?: AST.TSTypeAnnotation | null;
+    typeAnnotation?: AST.TSTypeAnnotation | null;
+  },
+  context: PrinterContext<unknown>,
+  options?: { tsArrowType: true },
+): void {
+  let ret: AST.Node | null | undefined = node.returnType ?? node.typeAnnotation;
+  if (options?.tsArrowType) {
+    // TSFunctionType / TSConstructorType use `=>` syntax:
+    // must unwrap the TSTypeAnnotation to get the raw type node
+    ret = ret?.typeAnnotation;
+  }
+  if (ret) {
+    context.writeNode(ret);
   }
 }
 
@@ -1946,14 +1912,15 @@ function printTSTypePredicate(
   node: AST.TSTypePredicate,
   context: PrinterContext<unknown>,
 ): void {
+  if (node.asserts === true) {
+    context.write("asserts ");
+  }
   if (node.parameterName) {
     context.writeNode(node.parameterName);
   } else if (node.typeAnnotation) {
     context.writeNode(node.typeAnnotation);
   }
-  if (node.asserts === true) {
-    context.write(" asserts ");
-  } else {
+  if (node.asserts !== true || node.typeAnnotation) {
     context.write(" is ");
   }
   if (node.typeAnnotation) {
@@ -2190,8 +2157,10 @@ function printTSDeclareFunction(
   if (node.typeParameters) {
     context.writeNode(node.typeParameters);
   }
-  printFuncParams(node, context);
-  printFuncReturnType(node, context);
+  context.write("(");
+  context.writeNodeList(node.params, ", ");
+  context.write(")");
+  writeReturnType(node, context);
   context.write(";");
 }
 
