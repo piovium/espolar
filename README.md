@@ -1,6 +1,6 @@
 # espolar
 
-ESTree-compatible AST printer for JavaScript and TypeScript with source preservation and Volar.js source mappings.
+ESTree-compatible AST printer designed for JavaScript/TypeScript language tooling.
 
 ## Features
 
@@ -64,7 +64,7 @@ const result = print(ast, {
   source,
   getMappingData: (node) => (node ? [node.type] : []),
   combineMappingData: (left, right) => {
-    return [...left, right];
+    return [...left, ...right];
   },
 });
 ```
