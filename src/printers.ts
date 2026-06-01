@@ -153,7 +153,7 @@ function arrowConciseBodyNeedsWrap(
 }
 
 // Printers
-export const defaultPrinters: Printers<unknown> = {
+export const defaultPrinters = {
   Program: printProgram,
   Identifier: printIdentifier,
   PrivateIdentifier: printPrivateIdentifier,
@@ -300,7 +300,7 @@ export const defaultPrinters: Printers<unknown> = {
   TSSymbolKeyword: printKeywordType,
   TSBigIntKeyword: printKeywordType,
   TSIntrinsicKeyword: printKeywordType,
-};
+} satisfies Printers<unknown>;
 
 // JS – Statements
 
@@ -388,9 +388,13 @@ function printReturnStatement(
     const leadingComments = context.getLeadingComments?.(statement.argument);
     const needsParensASi =
       leadingComments?.some((c) => commentNeedsNewline(c)) ?? false;
-    if (needsParensASi) context.write("(");
+    if (needsParensASi) {
+      context.write("(");
+    }
     context.writeNode(statement.argument);
-    if (needsParensASi) context.write(")");
+    if (needsParensASi) {
+      context.write(")");
+    }
   }
   context.write(";");
 }
@@ -404,9 +408,13 @@ function printThrowStatement(
     const leadingComments = context.getLeadingComments?.(statement.argument);
     const needsParensASi =
       leadingComments?.some((c) => commentNeedsNewline(c)) ?? false;
-    if (needsParensASi) context.write("(");
+    if (needsParensASi) {
+      context.write("(");
+    }
     context.writeNode(statement.argument);
-    if (needsParensASi) context.write(")");
+    if (needsParensASi) {
+      context.write(")");
+    }
   }
   context.write(";");
 }
@@ -677,9 +685,13 @@ function printUpdateExpression(
     const trailingComments = context.getTrailingComments?.(expr.argument);
     const needsParensASi =
       trailingComments?.some((c) => commentNeedsNewline(c)) ?? false;
-    if (needsParensASi) context.write("(");
+    if (needsParensASi) {
+      context.write("(");
+    }
     context.writeNode(expr.argument);
-    if (needsParensASi) context.write(")");
+    if (needsParensASi) {
+      context.write(")");
+    }
     context.write(expr.operator);
   }
 }
@@ -743,9 +755,13 @@ function printYieldExpression(
     const leadingComments = context.getLeadingComments?.(expr.argument);
     const needsParensASi =
       leadingComments?.some((c) => commentNeedsNewline(c)) ?? false;
-    if (needsParensASi) context.write("(");
+    if (needsParensASi) {
+      context.write("(");
+    }
     context.writeNode(expr.argument);
-    if (needsParensASi) context.write(")");
+    if (needsParensASi) {
+      context.write(")");
+    }
   }
 }
 
@@ -1460,14 +1476,11 @@ function printExportDefaultDeclaration(
 ): void {
   let decl = node.declaration;
   if ("decorators" in decl && decl.decorators && decl.decorators.length > 0) {
-    for (const d of decl.decorators) {
+    const { decorators, ...rest } = decl;
+    for (const d of decorators) {
       context.writeNode(d);
     }
-    const { decorators: _, ...rest } = decl as unknown as Record<
-      string,
-      unknown
-    >;
-    decl = rest as unknown as typeof decl;
+    decl = rest as typeof decl;
   }
   context.write("export default ");
   context.writeNode(decl);

@@ -4,6 +4,7 @@ export {
   defaultIsUntouched,
   print,
 } from "./printer.ts";
+export { defaultPrinters } from "./printers.ts";
 export type {
   NodePrinter,
   PrintOptions,
