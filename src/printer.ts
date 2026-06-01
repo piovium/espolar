@@ -250,7 +250,12 @@ function createPrinterContext<Data>(
 
       const generatedStart = generatedOffset;
       context.write(options.source.slice(start, end));
-      appendMapping({ start, end }, generatedStart, generatedOffset, data);
+      appendMapping(
+        { start, end },
+        generatedStart,
+        generatedOffset,
+        data ?? getMappingData(null),
+      );
     },
     writePreservedNode(node) {
       const range = getNodeRange(node);

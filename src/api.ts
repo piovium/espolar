@@ -49,7 +49,7 @@ export interface PrinterContext<Data = any> {
     nodes: readonly (AST.Node | null | undefined)[],
     fallbackSeparator: string,
   ): void;
-  writeSource(start: number, end: number, data: Data): void;
+  writeSource(start: number, end: number, data?: Data): void;
   writePreservedNode(node: AST.Node): void;
   appendMapping(
     sourceRange: SourceRange,

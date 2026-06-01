@@ -92,18 +92,18 @@ Main entry point. Returns `PrintResult<Data>`.
 
 The context object passed to each printer function.
 
-| Method/Property                                         | Description                                     |
-| ------------------------------------------------------- | ----------------------------------------------- |
-| `readonly source: string`                               | The original source string                      |
-| `readonly generatedOffset: number`                      | Current output position                         |
-| `write(text: string)`                                   | Emit text to the output                         |
-| `writeNode(node)`                                       | Dispatch to a printer (preserving if untouched) |
-| `writeNodeList(nodes, separator)`                       | Print a list with explicit separator            |
-| `writeNodeListWithSourceGaps(nodes, fallbackSeparator)` | Print a list, copying source gaps between nodes |
-| `writePreservedNode(node)`                              | Force-preserve a node from source               |
-| `writeSource(start, end, data)`                         | Copy source range and add mapping               |
-| `getLeadingComments(node)`                              | Query leading comments                          |
-| `getTrailingComments(node)`                             | Query trailing comments                         |
+| Method/Property                                      | Description                                     |
+| ---------------------------------------------------- | ----------------------------------------------- |
+| `readonly source: string`                            | The original source string                      |
+| `readonly generatedOffset: number`                   | Current output position                         |
+| `write(text: string)`                                | Emit text to the output                         |
+| `writeMapped(text: string, srcStart, srcEnd, data?)` | Emit text to the output with mappings           |
+| `writeNode(node)`                                    | Dispatch to a printer (preserving if untouched) |
+| `writeNodeList(nodes, sep)`                          | Print a list with explicit separator            |
+| `writeNodeListWithSourceGaps(nodes, fallbackSep)`    | Print a list, copying source gaps between nodes |
+| `writeSource(start, end, data?)`                     | Copy source range and add mapping               |
+| `writePreservedNode(node)`                           | Force-preserve a node from source               |
+| `appendMapping(srcRange, genStart, genEnd, data)`    | Append a mapping manually                       |
 
 ### Exported helpers
 
