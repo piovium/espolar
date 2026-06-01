@@ -6,7 +6,7 @@ import type {
   Printers,
 } from "./api.ts";
 import { defaultPrinters } from "./printers.ts";
-import type { AST, AST_NODE_TYPES } from "./types.ts";
+import type { AST, AST_NODE_TYPES, Comment, NodeLike } from "./types.ts";
 import {
   getNodeRange,
   pushMapping,
@@ -19,7 +19,10 @@ interface InternalPrinterContext<Data> extends PrinterContext<Data> {
   result(): PrintResult<Data>;
 }
 
-function writeComment(context: InternalPrinterContext<unknown>, comment: AST.Comment): void {
+function writeComment(
+  context: InternalPrinterContext<unknown>,
+  comment: Comment,
+): void {
   if (comment.type === "Line") {
     context.write("//" + comment.value + "\n");
   } else {
@@ -33,9 +36,21 @@ function writeComment(context: InternalPrinterContext<unknown>, comment: AST.Com
 export function print<Data>(
   node: AST.Node,
   options: PrintOptions<Data>,
+): PrintResult<Data>;
+export function print<Data>(
+  node: import("estree").Node,
+  options: PrintOptions<Data>,
+): PrintResult<Data>;
+export function print<Data>(
+  node: NodeLike,
+  options: PrintOptions<Data>,
+): PrintResult<Data>;
+export function print<Data>(
+  node: unknown,
+  options: PrintOptions<Data>,
 ): PrintResult<Data> {
   const context = createPrinterContext(options);
-  context.writeNode(node);
+  context.writeNode(node as AST.Node);
   return context.result();
 }
 

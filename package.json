@@ -23,8 +23,16 @@
     "node": ">= 26.0.0"
   },
   "dependencies": {
-    "@volar/source-map": "^2.4.17",
-    "@typescript-eslint/types": "^8.60.0"
+    "@typescript-eslint/types": "^8.60.0",
+    "@volar/source-map": "^2.4.17"
+  },
+  "peerDependencies": {
+    "@types/estree": "^1.0.9"
+  },
+  "peerDependenciesMeta": {
+    "@types/estree": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@sveltejs/acorn-typescript": "^1.0.10",

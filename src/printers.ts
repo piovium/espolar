@@ -1,5 +1,5 @@
 import type { PrinterContext, Printers } from "./api.ts";
-import type { AST } from "./types.ts";
+import type { AST, Comment } from "./types.ts";
 
 const EXPRESSIONS_PRECEDENCE: Record<string, number> = {
   ArrayPattern: 20,
@@ -66,7 +66,7 @@ const OPERATOR_PRECEDENCE: Record<string, number> = {
   "**": 13,
 };
 
-function commentNeedsNewline(comment: AST.Comment): boolean {
+function commentNeedsNewline(comment: Comment): boolean {
   if (comment.type === "Line") return true;
   return comment.value.includes("\n");
 }

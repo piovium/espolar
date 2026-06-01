@@ -2,7 +2,7 @@ import { Parser } from "acorn";
 import { tsPlugin } from "@sveltejs/acorn-typescript";
 import { describe, expect, it } from "vitest";
 import { print } from "../src/index.ts";
-import type { AST } from "../src/types.ts";
+import type { AST, Comment } from "../src/types.ts";
 
 const TsParser = Parser.extend(tsPlugin());
 
@@ -74,7 +74,7 @@ describe("print", () => {
           start: 0,
           end: 6,
           name: "changed",
-        } as AST.Node,
+        } as AST.Identifier,
         {
           source: "actual",
         },
@@ -129,7 +129,7 @@ describe("print", () => {
 
     it("throws when isUntouched returns true but node has no source range", () => {
       expect(() =>
-        print({ type: "Identifier", name: "x" } as AST.Node, {
+        print({ type: "Identifier", name: "x" } as AST.Identifier, {
           source: "",
           isUntouched: () => true,
         }),
@@ -182,7 +182,7 @@ describe("print", () => {
         start: 0,
         end: 11,
         name: "preserve me",
-      } as AST.Node;
+      };
       const result = print(node, {
         source,
         isUntouched: () => false,
@@ -196,7 +196,7 @@ describe("print", () => {
     });
 
     it("throws when writePreservedNode has no source range", () => {
-      const node = { type: "Identifier", name: "nope" } as AST.Node;
+      const node = { type: "Identifier", name: "nope" } as AST.Identifier;
       const result = print(node, {
         source: "",
         isUntouched: () => false,
@@ -216,7 +216,7 @@ describe("print", () => {
     it("supports custom printers with mapping data", () => {
       const source = "const value = 1;";
       const ast = parse(source);
-      const declaration = ast.body[0] as any as AST.VariableDeclaration;
+      const declaration = ast.body[0];
 
       const result = print<string | null>(declaration, {
         source,
@@ -225,9 +225,8 @@ describe("print", () => {
           node !== declaration && node.type !== "VariableDeclarator",
         printers: {
           VariableDeclaration: (node, context) => {
-            const variable = node as AST.VariableDeclaration;
             context.write("let ");
-            context.writeNode(variable.declarations[0]);
+            context.writeNode(node.declarations[0]);
             context.write(";");
           },
         },
@@ -266,7 +265,7 @@ describe("print", () => {
       print(
         {
           type: "NotImplemented",
-        } as unknown as AST.Node,
+        },
         {
           source: "",
           isUntouched: () => false,
@@ -276,8 +275,8 @@ describe("print", () => {
   });
 
   describe("comment printing", () => {
-    function makeComment(type: "Block" | "Line", value: string): AST.Comment {
-      return { type, value } as AST.Comment;
+    function makeComment(type: "Block" | "Line", value: string): Comment {
+      return { type, value };
     }
 
     it("prints leading line comment before a touched node", () => {
@@ -417,11 +416,11 @@ const x = 1;`);
         source,
         isUntouched: () => false,
         getLeadingComments: (node) =>
-          node.type === "Identifier" && (node as AST.Identifier).name === "x"
+          node.type === "Identifier" && (node).name === "x"
             ? [makeComment("Line", " first"), makeComment("Block", " second ")]
             : undefined,
         getTrailingComments: (node) =>
-          node.type === "Identifier" && (node as AST.Identifier).name === "x"
+          node.type === "Identifier" && (node).name === "x"
             ? [makeComment("Line", " after")]
             : undefined,
       });

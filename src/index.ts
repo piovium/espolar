@@ -10,4 +10,4 @@ export type {
   PrintResult,
   PrinterContext,
 } from "./api.ts";
-export type { AST } from "./types.ts";
+export type { AST, NodeLike, Comment } from "./types.ts";

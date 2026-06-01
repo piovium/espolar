@@ -38,5 +38,24 @@ declare module "@typescript-eslint/types" {
   }
 }
 
-export { TSESTree as AST } from "@typescript-eslint/types";
+import { TSESTree as AST } from "@typescript-eslint/types";
+
+export interface NodeLike {
+  type: string;
+  loc?: AST.SourceLocation | null;
+  start?: number;
+  end?: number;
+  range?: [number, number];
+}
+
+export interface Comment {
+  type: "Line" | "Block";
+  value: string;
+  loc?: AST.SourceLocation;
+  start?: number;
+  end?: number;
+  range?: [number, number];
+}
+
+export type { AST };
 export type { AST_NODE_TYPES } from "@typescript-eslint/types";

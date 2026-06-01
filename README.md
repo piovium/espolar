@@ -12,17 +12,11 @@ ESTree-compatible AST printer designed for JavaScript/TypeScript language toolin
 
 ## Install
 
-<!--
-
 ```bash
 pnpm add espolar
 ```
 
 Requires Node.js >= 26.
-
--->
-
-Not published yet
 
 ## Usage
 
