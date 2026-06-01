@@ -13,6 +13,7 @@
   "files": [
     "dist"
   ],
+  "license": "MIT",
   "repository": {
     "url": "git+https://github.com/piovium/espolar.git"
   },
