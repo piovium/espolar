@@ -51,7 +51,7 @@ export interface NodeLike {
 export interface Comment {
   type: "Line" | "Block";
   value: string;
-  loc?: AST.SourceLocation;
+  loc?: AST.SourceLocation | null;
   start?: number;
   end?: number;
   range?: [number, number];
