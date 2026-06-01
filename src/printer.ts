@@ -15,14 +15,11 @@ import {
   type SourceRange,
 } from "./mappings.ts";
 
-interface InternalPrinterContext<Data> extends PrinterContext<Data> {
-  result(): PrintResult<Data>;
+interface InternalPrinterContext extends PrinterContext<any> {
+  result(): PrintResult<any>;
 }
 
-function writeComment(
-  context: InternalPrinterContext<unknown>,
-  comment: Comment,
-): void {
+function writeComment(context: InternalPrinterContext, comment: Comment): void {
   if (comment.type === "Line") {
     context.write("//" + comment.value + "\n");
   } else {
@@ -71,7 +68,7 @@ export function defaultCombineMappingData(
 
 function createPrinterContext<Data>(
   options: PrintOptions<Data>,
-): InternalPrinterContext<Data> {
+): InternalPrinterContext {
   const chunks: string[] = [];
   const mappings: InternalMapping<Data>[] = [];
   let generatedOffset = 0;
@@ -89,8 +86,6 @@ function createPrinterContext<Data>(
     ...defaultPrinters,
     ...options.printers,
   };
-  const getLeadingComments = options.getLeadingComments ?? (() => undefined);
-  const getTrailingComments = options.getTrailingComments ?? (() => undefined);
 
   const appendMapping = (
     sourceRange: SourceRange,
@@ -111,7 +106,8 @@ function createPrinterContext<Data>(
     );
   };
 
-  const context: InternalPrinterContext<Data> = {
+  const context: InternalPrinterContext = {
+    options: options,
     source: options.source,
     get generatedOffset() {
       return generatedOffset;
@@ -122,6 +118,19 @@ function createPrinterContext<Data>(
       }
       chunks.push(text);
       generatedOffset += text.length;
+    },
+    writeMapped(text, sourceStart, sourceEnd, data) {
+      if (text.length === 0 || sourceEnd <= sourceStart) {
+        return;
+      }
+      const generatedStart = generatedOffset;
+      context.write(text);
+      appendMapping(
+        { start: sourceStart, end: sourceEnd },
+        generatedStart,
+        generatedOffset,
+        data ?? getMappingData(null),
+      );
     },
     writeNode(node) {
       if (!node) {
@@ -152,7 +161,7 @@ function createPrinterContext<Data>(
         throw new Error(`No printer registered for node type ${node.type}`);
       }
 
-      const leadingComments = getLeadingComments(node);
+      const leadingComments = options.getLeadingComments?.(node);
       if (leadingComments) {
         for (const c of leadingComments) {
           writeComment(context, c);
@@ -163,7 +172,7 @@ function createPrinterContext<Data>(
       printer(node, context);
       const generatedEnd = generatedOffset;
 
-      const trailingComments = getTrailingComments(node);
+      const trailingComments = options.getTrailingComments?.(node);
       if (trailingComments) {
         for (const c of trailingComments) {
           writeComment(context, c);
@@ -234,17 +243,6 @@ function createPrinterContext<Data>(
         }
       }
     },
-    writePreservedNode(node) {
-      const range = getNodeRange(node);
-      if (!range) {
-        throw new Error(
-          `Cannot preserve node ${node.type} without source offsets`,
-        );
-      }
-      context.writeSource(range.start, range.end, getMappingData(node));
-    },
-    getLeadingComments,
-    getTrailingComments,
     writeSource(start, end, data) {
       if (end <= start) {
         return;
@@ -254,6 +252,16 @@ function createPrinterContext<Data>(
       context.write(options.source.slice(start, end));
       appendMapping({ start, end }, generatedStart, generatedOffset, data);
     },
+    writePreservedNode(node) {
+      const range = getNodeRange(node);
+      if (!range) {
+        throw new Error(
+          `Cannot preserve node ${node.type} without source offsets`,
+        );
+      }
+      context.writeSource(range.start, range.end, getMappingData(node));
+    },
+    appendMapping,
     result() {
       return {
         code: chunks.join(""),

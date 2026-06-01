@@ -12,3 +12,4 @@ export type {
   PrinterContext,
 } from "./api.ts";
 export type { AST, NodeLike, Comment } from "./types.ts";
+export type { SourceRange } from "./mappings.ts";

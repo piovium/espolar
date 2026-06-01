@@ -304,16 +304,13 @@ export const defaultPrinters = {
 
 // JS – Statements
 
-function printProgram(
-  program: AST.Program,
-  context: PrinterContext<unknown>,
-): void {
+function printProgram(program: AST.Program, context: PrinterContext): void {
   context.writeNodeListWithSourceGaps(program.body, "\n");
 }
 
 function printExpressionStatement(
   statement: AST.ExpressionStatement,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   const expr = statement.expression;
   if (
@@ -332,14 +329,14 @@ function printExpressionStatement(
 
 function printEmptyStatement(
   _statement: AST.EmptyStatement,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write(";");
 }
 
 function printVariableDeclaration(
   declaration: AST.VariableDeclaration,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   if (declaration.declare === true) {
     context.write("declare ");
@@ -352,7 +349,7 @@ function printVariableDeclaration(
 
 function printVariableDeclarator(
   declarator: AST.VariableDeclarator,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.writeNode(declarator.id);
   if (declarator.definite === true) {
@@ -366,7 +363,7 @@ function printVariableDeclarator(
 
 function printBlockStatement(
   block: AST.BlockStatement,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   const body = block.body;
   context.write("{");
@@ -380,12 +377,14 @@ function printBlockStatement(
 
 function printReturnStatement(
   statement: AST.ReturnStatement,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("return");
   if (statement.argument) {
     context.write(" ");
-    const leadingComments = context.getLeadingComments?.(statement.argument);
+    const leadingComments = context.options.getLeadingComments?.(
+      statement.argument,
+    );
     const needsParensASi =
       leadingComments?.some((c) => commentNeedsNewline(c)) ?? false;
     if (needsParensASi) {
@@ -401,11 +400,13 @@ function printReturnStatement(
 
 function printThrowStatement(
   statement: AST.ThrowStatement,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("throw ");
   if (statement.argument) {
-    const leadingComments = context.getLeadingComments?.(statement.argument);
+    const leadingComments = context.options.getLeadingComments?.(
+      statement.argument,
+    );
     const needsParensASi =
       leadingComments?.some((c) => commentNeedsNewline(c)) ?? false;
     if (needsParensASi) {
@@ -421,14 +422,14 @@ function printThrowStatement(
 
 function printDebuggerStatement(
   _statement: AST.DebuggerStatement,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("debugger;");
 }
 
 function printBreakStatement(
   statement: AST.BreakStatement,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("break");
   if (statement.label) {
@@ -440,7 +441,7 @@ function printBreakStatement(
 
 function printContinueStatement(
   statement: AST.ContinueStatement,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("continue");
   if (statement.label) {
@@ -452,7 +453,7 @@ function printContinueStatement(
 
 function printLabeledStatement(
   statement: AST.LabeledStatement,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.writeNode(statement.label);
   context.write(": ");
@@ -461,7 +462,7 @@ function printLabeledStatement(
 
 function printWhileStatement(
   statement: AST.WhileStatement,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("while (");
   context.writeNode(statement.test);
@@ -471,7 +472,7 @@ function printWhileStatement(
 
 function printDoWhileStatement(
   statement: AST.DoWhileStatement,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("do ");
   context.writeNode(statement.body);
@@ -482,7 +483,7 @@ function printDoWhileStatement(
 
 function printIfStatement(
   statement: AST.IfStatement,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("if (");
   context.writeNode(statement.test);
@@ -496,7 +497,7 @@ function printIfStatement(
 
 function printForStatement(
   statement: AST.ForStatement,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("for (");
   if (statement.init) {
@@ -520,7 +521,7 @@ function printForStatement(
 
 function printForInStatement(
   statement: AST.ForInStatement,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("for (");
   if (statement.left.type === "VariableDeclaration") {
@@ -536,7 +537,7 @@ function printForInStatement(
 
 function printForOfStatement(
   statement: AST.ForOfStatement,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("for ");
   if (statement.await === true) {
@@ -556,7 +557,7 @@ function printForOfStatement(
 
 function printVariableDeclarationFor(
   declaration: AST.VariableDeclaration,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write(String(declaration.kind));
   context.write(" ");
@@ -565,7 +566,7 @@ function printVariableDeclarationFor(
 
 function printSwitchStatement(
   statement: AST.SwitchStatement,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("switch (");
   context.writeNode(statement.discriminant);
@@ -576,10 +577,7 @@ function printSwitchStatement(
   context.write("}");
 }
 
-function printSwitchCase(
-  case_: AST.SwitchCase,
-  context: PrinterContext<unknown>,
-): void {
+function printSwitchCase(case_: AST.SwitchCase, context: PrinterContext): void {
   if (case_.test) {
     context.write("\ncase ");
     context.writeNode(case_.test);
@@ -595,7 +593,7 @@ function printSwitchCase(
 
 function printTryStatement(
   statement: AST.TryStatement,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("try ");
   context.writeNode(statement.block);
@@ -618,7 +616,7 @@ function printTryStatement(
 
 function printWithStatement(
   statement: AST.WithStatement,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("with (");
   context.writeNode(statement.object);
@@ -630,7 +628,7 @@ function printWithStatement(
 
 function printIdentifier(
   identifier: AST.Identifier,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write(String(identifier.name));
   writeOptionalTypeAnnotation(identifier, context);
@@ -638,16 +636,13 @@ function printIdentifier(
 
 function printPrivateIdentifier(
   identifier: AST.PrivateIdentifier,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("#");
   context.write(String(identifier.name));
 }
 
-function printLiteral(
-  literal: AST.Literal,
-  context: PrinterContext<unknown>,
-): void {
+function printLiteral(literal: AST.Literal, context: PrinterContext): void {
   if (typeof literal.raw === "string") {
     context.write(literal.raw);
     return;
@@ -658,7 +653,7 @@ function printLiteral(
 
 function printUnaryExpression(
   expr: AST.UnaryExpression,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write(expr.operator);
   if (expr.operator.length > 1) {
@@ -676,13 +671,15 @@ function printUnaryExpression(
 
 function printUpdateExpression(
   expr: AST.UpdateExpression,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   if (expr.prefix === true) {
     context.write(expr.operator);
     context.writeNode(expr.argument);
   } else {
-    const trailingComments = context.getTrailingComments?.(expr.argument);
+    const trailingComments = context.options.getTrailingComments?.(
+      expr.argument,
+    );
     const needsParensASi =
       trailingComments?.some((c) => commentNeedsNewline(c)) ?? false;
     if (needsParensASi) {
@@ -701,7 +698,7 @@ function printBinaryExpression(
     | AST.AssignmentExpression
     | AST.LogicalExpression
     | AST.BinaryExpression,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   const left = expression.left;
   const right = expression.right;
@@ -729,7 +726,7 @@ function printBinaryExpression(
 
 function printConditionalExpression(
   expr: AST.ConditionalExpression,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   const testPrec = EXPRESSIONS_PRECEDENCE[expr.test.type] ?? 20;
   if (testPrec <= EXPRESSIONS_PRECEDENCE.ConditionalExpression) {
@@ -747,12 +744,12 @@ function printConditionalExpression(
 
 function printYieldExpression(
   expr: AST.YieldExpression,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write(expr.delegate === true ? "yield*" : "yield");
   if (expr.argument) {
     context.write(" ");
-    const leadingComments = context.getLeadingComments?.(expr.argument);
+    const leadingComments = context.options.getLeadingComments?.(expr.argument);
     const needsParensASi =
       leadingComments?.some((c) => commentNeedsNewline(c)) ?? false;
     if (needsParensASi) {
@@ -767,7 +764,7 @@ function printYieldExpression(
 
 function printAwaitExpression(
   expr: AST.AwaitExpression,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("await");
   if (expr.argument) {
@@ -785,7 +782,7 @@ function printAwaitExpression(
 
 function printSequenceExpression(
   expr: AST.SequenceExpression,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("(");
   context.writeNodeList(expr.expressions, ", ");
@@ -794,7 +791,7 @@ function printSequenceExpression(
 
 function printCallExpression(
   expression: AST.CallExpression,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   const calleePrec = EXPRESSIONS_PRECEDENCE[expression.callee.type] ?? 20;
   if (calleePrec < EXPRESSIONS_PRECEDENCE.CallExpression) {
@@ -807,14 +804,23 @@ function printCallExpression(
   if (expression.typeArguments) {
     context.writeNode(expression.typeArguments);
   }
-  context.write(expression.optional === true ? "?.(" : "(");
+  if (expression.optional === true) {
+    context.write("?.");
+  }
+  const parenRange =
+    context.options.experimentalGetLeftParenSourceRange?.(expression);
+  if (parenRange) {
+    context.writeMapped("(", parenRange.start, parenRange.end);
+  } else {
+    context.write("(");
+  }
   context.writeNodeList(expression.arguments, ", ");
   context.write(")");
 }
 
 function printNewExpression(
   expression: AST.NewExpression,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("new ");
   const calleePrec = EXPRESSIONS_PRECEDENCE[expression.callee.type] ?? 20;
@@ -831,7 +837,13 @@ function printNewExpression(
   if (expression.typeArguments) {
     context.writeNode(expression.typeArguments);
   }
-  context.write("(");
+  const parenRange =
+    context.options.experimentalGetLeftParenSourceRange?.(expression);
+  if (parenRange) {
+    context.writeMapped("(", parenRange.start, parenRange.end);
+  } else {
+    context.write("(");
+  }
   context.writeNodeList(expression.arguments, ", ");
   context.write(")");
 }
@@ -851,14 +863,14 @@ function hasCallExpression(node: AST.Expression): boolean {
 
 function printChainExpression(
   expression: AST.ChainExpression,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.writeNode(expression.expression);
 }
 
 function printMemberExpression(
   expression: AST.MemberExpression,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   const objPrec = EXPRESSIONS_PRECEDENCE[expression.object.type] ?? 20;
   if (objPrec < EXPRESSIONS_PRECEDENCE.MemberExpression) {
@@ -880,7 +892,7 @@ function printMemberExpression(
 
 function printObjectExpression(
   object: AST.ObjectExpression,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("{ ");
   context.writeNodeList(object.properties, ", ");
@@ -889,7 +901,7 @@ function printObjectExpression(
 
 function printObjectPattern(
   pattern: AST.ObjectPattern,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("{ ");
   context.writeNodeList(pattern.properties, ", ");
@@ -899,7 +911,7 @@ function printObjectPattern(
 
 function printArrayExpression(
   array: AST.ArrayExpression,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("[");
   context.writeNodeList(array.elements, ", ");
@@ -908,7 +920,7 @@ function printArrayExpression(
 
 function printArrayPattern(
   pattern: AST.ArrayPattern,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("[");
   context.writeNodeList(pattern.elements, ", ");
@@ -918,7 +930,7 @@ function printArrayPattern(
 
 function printProperty(
   property: AST.Property | AST.PropertyDefinition,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   if (property.type === "Property") {
     const value = property.value;
@@ -980,7 +992,7 @@ function printProperty(
 
 function printSpreadElement(
   spread: AST.SpreadElement,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("...");
   context.writeNode(spread.argument);
@@ -988,7 +1000,7 @@ function printSpreadElement(
 
 function printRestElement(
   rest: AST.RestElement,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("...");
   context.writeNode(rest.argument);
@@ -997,7 +1009,7 @@ function printRestElement(
 
 function printAssignmentPattern(
   pattern: AST.AssignmentPattern,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.writeNode(pattern.left);
   context.write(" = ");
@@ -1006,7 +1018,7 @@ function printAssignmentPattern(
 
 function printTemplateLiteral(
   node: AST.TemplateLiteral,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("`");
   const { quasis, expressions } = node;
@@ -1022,7 +1034,7 @@ function printTemplateLiteral(
 
 function printTaggedTemplateExpression(
   node: AST.TaggedTemplateExpression,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.writeNode(node.tag);
   context.writeNode(node.quasi);
@@ -1030,18 +1042,18 @@ function printTaggedTemplateExpression(
 
 function printThisExpression(
   _node: AST.ThisExpression,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("this");
 }
 
-function printSuper(_node: AST.Super, context: PrinterContext<unknown>): void {
+function printSuper(_node: AST.Super, context: PrinterContext): void {
   context.write("super");
 }
 
 function printMetaProperty(
   node: AST.MetaProperty,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.writeNode(node.meta);
   context.write(".");
@@ -1050,7 +1062,7 @@ function printMetaProperty(
 
 function printParenthesizedExpression(
   node: { expression: AST.Node },
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("(");
   context.writeNode(node.expression);
@@ -1061,21 +1073,21 @@ function printParenthesizedExpression(
 
 function printFunctionDeclaration(
   node: AST.FunctionDeclaration,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   printFunction(node, context);
 }
 
 function printFunctionExpression(
   node: AST.FunctionExpression,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   printFunction(node, context);
 }
 
 function printFunction(
   fn: AST.FunctionDeclaration | AST.FunctionExpression,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   if (fn.async === true) {
     context.write("async ");
@@ -1103,7 +1115,7 @@ function printFunction(
 
 function printArrowFunctionExpression(
   fn: AST.ArrowFunctionExpression,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   if (fn.async === true) {
     context.write("async ");
@@ -1128,21 +1140,21 @@ function printArrowFunctionExpression(
 
 function printClassDeclaration(
   node: AST.ClassDeclaration,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   printClass(node, context);
 }
 
 function printClassExpression(
   node: AST.ClassExpression,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   printClass(node, context);
 }
 
 function printClass(
   node: AST.ClassDeclaration | AST.ClassExpression,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   if (node.decorators) {
     for (const d of node.decorators) {
@@ -1179,10 +1191,7 @@ function printClass(
   context.writeNode(node.body);
 }
 
-function printClassBody(
-  node: AST.ClassBody,
-  context: PrinterContext<unknown>,
-): void {
+function printClassBody(node: AST.ClassBody, context: PrinterContext): void {
   context.write("{");
   const body = node.body;
   if (body.length > 0) {
@@ -1195,7 +1204,7 @@ function printClassBody(
 
 function printStaticBlock(
   node: AST.StaticBlock,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("static {");
   const body = node.body;
@@ -1207,10 +1216,7 @@ function printStaticBlock(
   context.write("}");
 }
 
-function printDecorator(
-  node: AST.Decorator,
-  context: PrinterContext<unknown>,
-): void {
+function printDecorator(node: AST.Decorator, context: PrinterContext): void {
   context.write("@");
   context.writeNode(node.expression);
   context.write("\n");
@@ -1222,7 +1228,7 @@ function printPropertyDefinition(
     | AST.AccessorProperty
     | AST.TSAbstractAccessorProperty
     | AST.TSAbstractPropertyDefinition,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   if (node.decorators) {
     for (const d of node.decorators) {
@@ -1278,7 +1284,7 @@ function printPropertyDefinition(
 
 function printMethodDefinition(
   node: AST.MethodDefinition | AST.TSAbstractMethodDefinition,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   const def = node;
   if (def.decorators) {
@@ -1333,7 +1339,7 @@ function printMethodDefinition(
 
 function printImportDeclaration(
   node: AST.ImportDeclaration,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("import ");
   if (node.importKind === "type") {
@@ -1393,7 +1399,7 @@ function printImportDeclaration(
 
 function printImportExpression(
   node: AST.ImportExpression,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("import(");
   context.writeNode(node.source);
@@ -1406,7 +1412,7 @@ function printImportExpression(
 
 function printImportSpecifier(
   node: AST.ImportSpecifier,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   if (node.importKind === "type") {
     context.write("type ");
@@ -1424,7 +1430,7 @@ function printImportSpecifier(
 
 function printExportNamedDeclaration(
   node: AST.ExportNamedDeclaration,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   if (node.declaration) {
     let decl = node.declaration;
@@ -1472,7 +1478,7 @@ function printExportNamedDeclaration(
 
 function printExportDefaultDeclaration(
   node: AST.ExportDefaultDeclaration,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   let decl = node.declaration;
   if ("decorators" in decl && decl.decorators && decl.decorators.length > 0) {
@@ -1495,7 +1501,7 @@ function printExportDefaultDeclaration(
 
 function printExportAllDeclaration(
   node: AST.ExportAllDeclaration,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write(node.exportKind === "type" ? "export type * " : "export * ");
   if (node.exported) {
@@ -1510,7 +1516,7 @@ function printExportAllDeclaration(
 
 function printExportSpecifier(
   node: AST.ExportSpecifier,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   if (node.exportKind === "type") {
     context.write("type ");
@@ -1530,7 +1536,7 @@ function printExportSpecifier(
 
 function printTSAsExpression(
   expression: AST.TSAsExpression,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   const exprPrec = EXPRESSIONS_PRECEDENCE[expression.expression.type] ?? 20;
   if (exprPrec < EXPRESSIONS_PRECEDENCE.TSAsExpression) {
@@ -1546,7 +1552,7 @@ function printTSAsExpression(
 
 function printTSSatisfiesExpression(
   expression: AST.TSSatisfiesExpression,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   const exprPrec = EXPRESSIONS_PRECEDENCE[expression.expression.type] ?? 20;
   if (exprPrec < EXPRESSIONS_PRECEDENCE.TSSatisfiesExpression) {
@@ -1562,7 +1568,7 @@ function printTSSatisfiesExpression(
 
 function printTSTypeAssertion(
   expression: AST.TSTypeAssertion,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("<");
   context.writeNode(expression.typeAnnotation);
@@ -1579,7 +1585,7 @@ function printTSTypeAssertion(
 
 function printTSNonNullExpression(
   expression: AST.TSNonNullExpression,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.writeNode(expression.expression);
   context.write("!");
@@ -1587,7 +1593,7 @@ function printTSNonNullExpression(
 
 function printTSTypeAnnotation(
   annotation: AST.TSTypeAnnotation,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write(": ");
   context.writeNode(annotation.typeAnnotation);
@@ -1595,7 +1601,7 @@ function printTSTypeAnnotation(
 
 function printTSTypeAliasDeclaration(
   alias: AST.TSTypeAliasDeclaration,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   if (alias.declare === true) {
     context.write("declare ");
@@ -1612,7 +1618,7 @@ function printTSTypeAliasDeclaration(
 
 function printTSInterfaceDeclaration(
   node: AST.TSInterfaceDeclaration,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   const declaration = node;
   if (declaration.declare === true) {
@@ -1638,7 +1644,7 @@ function printTSExpressionWithTypeArguments(
     typeArguments?: AST.Node;
     typeParameters?: AST.Node;
   },
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.writeNode(node.expression);
   if (node.typeArguments) {
@@ -1651,7 +1657,7 @@ function printTSExpressionWithTypeArguments(
 
 function printTSInterfaceBody(
   body: AST.TSInterfaceBody,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("{");
   const members = body.body;
@@ -1665,7 +1671,7 @@ function printTSInterfaceBody(
 
 function printTSPropertySignature(
   signature: AST.TSPropertySignature,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   if (signature.readonly === true) {
     context.write("readonly ");
@@ -1688,7 +1694,7 @@ function printTSPropertySignature(
 
 function printTypeParameterDeclaration(
   declaration: AST.TSTypeParameterDeclaration,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("<");
   context.writeNodeList(declaration.params, ", ");
@@ -1697,7 +1703,7 @@ function printTypeParameterDeclaration(
 
 function printTypeParameterInstantiation(
   instantiation: AST.TSTypeParameterInstantiation,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("<");
   context.writeNodeList(instantiation.params, ", ");
@@ -1706,7 +1712,7 @@ function printTypeParameterInstantiation(
 
 function printTSTypeParameter(
   parameter: AST.TSTypeParameter,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   if (parameter.const === true) {
     context.write("const ");
@@ -1736,7 +1742,7 @@ function printTSTypeParameter(
 
 function printTSFunctionType(
   type: AST.TSFunctionType,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   if (type.typeParameters) {
     context.writeNode(type.typeParameters);
@@ -1754,7 +1760,7 @@ function printTSFunctionType(
 
 function printTSConstructorType(
   type: AST.TSConstructorType,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("new ");
   if (type.typeParameters) {
@@ -1773,7 +1779,7 @@ function printTSConstructorType(
 
 function printTSMethodSignature(
   signature: AST.TSMethodSignature,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   if (signature.readonly === true) {
     context.write("readonly ");
@@ -1804,7 +1810,7 @@ function printTSMethodSignature(
 
 function printTSCallSignatureDeclaration(
   signature: AST.TSCallSignatureDeclaration,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   if (signature.typeParameters) {
     context.writeNode(signature.typeParameters);
@@ -1822,7 +1828,7 @@ function printTSCallSignatureDeclaration(
 
 function printTSConstructSignatureDeclaration(
   signature: AST.TSConstructSignatureDeclaration,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("new ");
   if (signature.typeParameters) {
@@ -1841,7 +1847,7 @@ function printTSConstructSignatureDeclaration(
 
 function printTSIndexSignature(
   signature: AST.TSIndexSignature,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("[");
   if (signature.parameters) {
@@ -1857,7 +1863,7 @@ function writeReturnType(
     returnType?: AST.TSTypeAnnotation | null;
     typeAnnotation?: AST.TSTypeAnnotation | null;
   },
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
   options?: { tsArrowType: true },
 ): void {
   let ret: AST.Node | null | undefined = node.returnType ?? node.typeAnnotation;
@@ -1873,7 +1879,7 @@ function writeReturnType(
 
 function printTSTypeReference(
   reference: AST.TSTypeReference,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.writeNode(reference.typeName);
   if (reference.typeArguments) {
@@ -1883,7 +1889,7 @@ function printTSTypeReference(
 
 function printTSQualifiedName(
   name: AST.TSQualifiedName,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.writeNode(name.left);
   context.write(".");
@@ -1892,7 +1898,7 @@ function printTSQualifiedName(
 
 function printJoinedTypes(
   joined: AST.TSUnionType | AST.TSIntersectionType,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.writeNodeList(
     joined.types,
@@ -1902,7 +1908,7 @@ function printJoinedTypes(
 
 function printTSArrayType(
   array: AST.TSArrayType,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.writeNode(array.elementType);
   context.write("[]");
@@ -1910,7 +1916,7 @@ function printTSArrayType(
 
 function printTSTupleType(
   node: AST.TSTupleType,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("[");
   context.writeNodeList(node.elementTypes, ", ");
@@ -1919,7 +1925,7 @@ function printTSTupleType(
 
 function printTSNamedTupleMember(
   node: AST.TSNamedTupleMember,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.writeNode(node.label);
   context.write(": ");
@@ -1928,7 +1934,7 @@ function printTSNamedTupleMember(
 
 function printTSTypeLiteral(
   literal: AST.TSTypeLiteral,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("{ ");
   context.writeNodeList(literal.members, " ");
@@ -1937,7 +1943,7 @@ function printTSTypeLiteral(
 
 function printTSTypeOperator(
   node: AST.TSTypeOperator,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write(node.operator + " ");
   if (node.typeAnnotation) {
@@ -1947,7 +1953,7 @@ function printTSTypeOperator(
 
 function printTSTypePredicate(
   node: AST.TSTypePredicate,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   if (node.asserts === true) {
     context.write("asserts ");
@@ -1967,7 +1973,7 @@ function printTSTypePredicate(
 
 function printTSTypeQuery(
   node: AST.TSTypeQuery,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("typeof ");
   context.writeNode(node.exprName);
@@ -1975,7 +1981,7 @@ function printTSTypeQuery(
 
 function printTSMappedType(
   node: AST.TSMappedType,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("{ [");
   const legacyTp = node.typeParameter;
@@ -2003,7 +2009,7 @@ function printTSMappedType(
 
 function printTSConditionalType(
   node: AST.TSConditionalType,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.writeNode(node.checkType);
   context.write(" extends ");
@@ -2016,7 +2022,7 @@ function printTSConditionalType(
 
 function printTSInferType(
   node: AST.TSInferType,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("infer ");
   context.writeNode(node.typeParameter);
@@ -2024,7 +2030,7 @@ function printTSInferType(
 
 function printTSIndexedAccessType(
   node: AST.TSIndexedAccessType,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.writeNode(node.objectType);
   context.write("[");
@@ -2034,37 +2040,31 @@ function printTSIndexedAccessType(
 
 function printTSOptionalType(
   node: AST.TSOptionalType,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.writeNode(node.typeAnnotation);
   context.write("?");
 }
 
-function printTSRestType(
-  node: AST.TSRestType,
-  context: PrinterContext<unknown>,
-): void {
+function printTSRestType(node: AST.TSRestType, context: PrinterContext): void {
   context.write("...");
   context.writeNode(node.typeAnnotation);
 }
 
-function printTSThisType(
-  _node: AST.TSThisType,
-  context: PrinterContext<unknown>,
-): void {
+function printTSThisType(_node: AST.TSThisType, context: PrinterContext): void {
   context.write("this");
 }
 
 function printTSLiteralType(
   literal: AST.TSLiteralType,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.writeNode(literal.literal);
 }
 
 function printTSTemplateLiteralType(
   node: AST.TSTemplateLiteralType,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("`");
   const { quasis, types } = node;
@@ -2080,7 +2080,7 @@ function printTSTemplateLiteralType(
 
 function printTSImportType(
   node: AST.TSImportType,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("import(");
   context.writeNode(node.argument);
@@ -2093,7 +2093,7 @@ function printTSImportType(
 
 function printTSImportEqualsDeclaration(
   node: AST.TSImportEqualsDeclaration,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("import ");
   context.writeNode(node.id);
@@ -2104,7 +2104,7 @@ function printTSImportEqualsDeclaration(
 
 function printTSExternalModuleReference(
   node: AST.TSExternalModuleReference,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("require(");
   context.writeNode(node.expression);
@@ -2113,7 +2113,7 @@ function printTSExternalModuleReference(
 
 function printTSEnumDeclaration(
   node: AST.TSEnumDeclaration,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   if (node.declare === true) {
     context.write("declare ");
@@ -2131,7 +2131,7 @@ function printTSEnumDeclaration(
 
 function printTSEnumMember(
   node: AST.TSEnumMember,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.writeNode(node.id);
   if (node.initializer) {
@@ -2142,7 +2142,7 @@ function printTSEnumMember(
 
 function printTSModuleDeclaration(
   node: AST.TSModuleDeclaration,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   if (node.declare === true) {
     context.write("declare ");
@@ -2166,7 +2166,7 @@ function printTSModuleDeclaration(
 
 function printTSModuleBlock(
   node: AST.TSModuleBlock,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("{\n");
   context.writeNodeListWithSourceGaps(node.body, "\n");
@@ -2175,7 +2175,7 @@ function printTSModuleBlock(
 
 function printTSDeclareFunction(
   node: AST.TSDeclareFunction,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("declare ");
   if (node.async === true) {
@@ -2201,7 +2201,7 @@ function printTSDeclareFunction(
 
 function printTSParameterProperty(
   node: AST.TSParameterProperty,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   if (node.accessibility) {
     context.write(node.accessibility + " ");
@@ -2214,7 +2214,7 @@ function printTSParameterProperty(
 
 function printTSExportAssignment(
   node: AST.TSExportAssignment,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("export = ");
   context.writeNode(node.expression);
@@ -2223,7 +2223,7 @@ function printTSExportAssignment(
 
 function printTSNamespaceExportDeclaration(
   node: AST.TSNamespaceExportDeclaration,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("export as namespace ");
   context.writeNode(node.id);
@@ -2232,7 +2232,7 @@ function printTSNamespaceExportDeclaration(
 
 function printTSInstantiationExpression(
   node: { expression: AST.Node; typeArguments: AST.Node },
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.writeNode(node.expression);
   context.writeNode(node.typeArguments);
@@ -2240,7 +2240,7 @@ function printTSInstantiationExpression(
 
 function printTSParenthesizedType(
   node: { typeAnnotation: AST.Node },
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   context.write("(");
   context.writeNode(node.typeAnnotation);
@@ -2249,7 +2249,7 @@ function printTSParenthesizedType(
 
 function printKeywordType(
   node: Extract<AST.Node, { type: `${string}Keyword` }>,
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   const keyword = node.type.slice(2, -"Keyword".length).toLowerCase();
   context.write(keyword);
@@ -2257,7 +2257,7 @@ function printKeywordType(
 
 function writeOptionalTypeAnnotation(
   node: { optional?: boolean; typeAnnotation?: AST.Node | null },
-  context: PrinterContext<unknown>,
+  context: PrinterContext,
 ): void {
   if (node.optional === true) {
     context.write("?");

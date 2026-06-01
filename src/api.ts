@@ -15,12 +15,31 @@ export interface PrintOptions<Data> {
   printers?: Printers<Data>;
   getLeadingComments?: (node: AST.Node) => Comment[] | undefined;
   getTrailingComments?: (node: AST.Node) => Comment[] | undefined;
+  /**
+   * Provide additional source range for the left parenthesis of `CallExpression` and `NewExpression`.
+   * This is useful for language tools that want to provide signature hints when user enter `(`.
+   * 
+   * @notes This hook will not interact with parentheses around the callee.
+   * 
+   * @param node The `CallExpression` or `NewExpression` node.
+   * @returns The source range of the left parenthesis, `undefined` if not available.
+   */
+  experimentalGetLeftParenSourceRange?: (
+    node: AST.CallExpression | AST.NewExpression,
+  ) => SourceRange | undefined;
 }
 
-export interface PrinterContext<Data> {
+export interface PrinterContext<Data = any> {
+  readonly options: PrintOptions<Data>;
   readonly source: string;
   readonly generatedOffset: number;
   write(text: string): void;
+  writeMapped(
+    text: string,
+    sourceStart: number,
+    sourceEnd: number,
+    data?: Data,
+  ): void;
   writeNode(node: AST.Node | null | undefined): void;
   writeNodeList(
     nodes: readonly (AST.Node | null | undefined)[],
@@ -30,10 +49,14 @@ export interface PrinterContext<Data> {
     nodes: readonly (AST.Node | null | undefined)[],
     fallbackSeparator: string,
   ): void;
-  writePreservedNode(node: AST.Node): void;
   writeSource(start: number, end: number, data: Data): void;
-  getLeadingComments: (node: AST.Node) => Comment[] | undefined;
-  getTrailingComments: (node: AST.Node) => Comment[] | undefined;
+  writePreservedNode(node: AST.Node): void;
+  appendMapping(
+    sourceRange: SourceRange,
+    generatedStart: number,
+    generatedEnd: number,
+    data?: Data,
+  ): void;
 }
 
 export type NodePrinter<Key extends AST_NODE_TYPES, Data> = (

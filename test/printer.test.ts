@@ -195,6 +195,41 @@ describe("print", () => {
       expect(result.code).toBe("preserve me");
     });
 
+    it("supports writeMapped to write text with attached source mapping", () => {
+      const source = "hello world";
+      const node = {
+        type: "Identifier",
+        range: [0, 11],
+        name: "hello world",
+      } as AST.Identifier;
+
+      const result = print<{ label: string }>(node, {
+        source,
+        isUntouched: () => false,
+        printers: {
+          Identifier: (_node, context) => {
+            context.writeMapped("hello", 0, 5);
+            context.write(" ");
+            context.appendMapping(
+              { start: 6, end: 11 },
+              context.generatedOffset,
+              context.generatedOffset + 5,
+            );
+            context.write("world");
+          },
+        },
+      });
+
+      expect(result.code).toBe("hello world");
+      expect(result.mappings).toHaveLength(2);
+      expect(result.mappings[0].sourceOffsets).toEqual([0]);
+      expect(result.mappings[0].lengths).toEqual([5]);
+      expect(result.mappings[0].generatedOffsets).toEqual([0]);
+      expect(result.mappings[1].sourceOffsets).toEqual([6]);
+      expect(result.mappings[1].lengths).toEqual([5]);
+      expect(result.mappings[1].generatedOffsets).toEqual([6]);
+    });
+
     it("throws when writePreservedNode has no source range", () => {
       const node = { type: "Identifier", name: "nope" } as AST.Identifier;
       const result = print(node, {
@@ -237,6 +272,46 @@ describe("print", () => {
         "Identifier",
         "Literal",
       ]);
+    });
+
+    it("maps left paren of CallExpression and NewExpression via experimentalGetLeftParenSourceRange", () => {
+      const source = "a = foo(bar); new Baz(qux);";
+      const ast = parse(source);
+
+      const result = print<{ label: string }>(ast, {
+        source,
+        isUntouched: () => false,
+        getMappingData: (node) => ({ label: node?.type ?? "gap" }),
+        experimentalGetLeftParenSourceRange: (node) => {
+          if (node.type === "CallExpression") {
+            // "a = foo(bar)" — "(" at position 7
+            return { start: 7, end: 8 };
+          }
+          if (node.type === "NewExpression") {
+            // "a = foo(bar); new Baz(qux);" — "(" at position 21
+            return { start: 21, end: 22 };
+          }
+          return undefined;
+        },
+      });
+
+      expect(result.code).toBe("a = foo(bar); new Baz(qux);");
+
+      const callParen = result.mappings.find(
+        (m) =>
+          m.sourceOffsets[0] <= 7 && m.sourceOffsets[0] + m.lengths[0] >= 8,
+      );
+      expect(callParen).toBeDefined();
+      expect(callParen!.generatedOffsets[0]).toBe(7);
+      expect(callParen!.data).toEqual({ label: "gap" });
+
+      const newParen = result.mappings.find(
+        (m) =>
+          m.sourceOffsets[0] <= 21 && m.sourceOffsets[0] + m.lengths[0] >= 22,
+      );
+      expect(newParen).toBeDefined();
+      expect(newParen!.generatedOffsets[0]).toBe(21);
+      expect(newParen!.data).toEqual({ label: "gap" });
     });
 
     it("supports getMappingData for leaf node mappings", () => {
@@ -416,11 +491,11 @@ const x = 1;`);
         source,
         isUntouched: () => false,
         getLeadingComments: (node) =>
-          node.type === "Identifier" && (node).name === "x"
+          node.type === "Identifier" && node.name === "x"
             ? [makeComment("Line", " first"), makeComment("Block", " second ")]
             : undefined,
         getTrailingComments: (node) =>
-          node.type === "Identifier" && (node).name === "x"
+          node.type === "Identifier" && node.name === "x"
             ? [makeComment("Line", " after")]
             : undefined,
       });
