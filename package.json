@@ -2,6 +2,7 @@
   "name": "espolar",
   "version": "0.1.0",
   "type": "module",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -12,6 +13,9 @@
   "files": [
     "dist"
   ],
+  "repository": {
+    "url": "git+https://github.com/piovium/espolar.git"
+  },
   "scripts": {
     "build": "tsdown",
     "coverage": "vitest run --coverage",
