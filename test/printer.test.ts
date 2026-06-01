@@ -275,6 +275,162 @@ describe("print", () => {
     ).toThrow("No printer registered for node type NotImplemented");
   });
 
+  describe("comment printing", () => {
+    function makeComment(type: "Block" | "Line", value: string): AST.Comment {
+      return { type, value } as AST.Comment;
+    }
+
+    it("prints leading line comment before a touched node", () => {
+      const source = "const x = 1;";
+      const ast = parse(source);
+      const result = print(ast, {
+        source,
+        isUntouched: () => false,
+        getLeadingComments: (node) =>
+          node.type === "Literal"
+            ? [makeComment("Line", " a comment")]
+            : undefined,
+      });
+      expect(result.code).toBe("const x = // a comment\n1;");
+    });
+
+    it("prints trailing block comment after a touched node", () => {
+      const source = "const x = 1;";
+      const ast = parse(source);
+      const result = print(ast, {
+        source,
+        isUntouched: () => false,
+        getTrailingComments: (node) =>
+          node.type === "Literal"
+            ? [makeComment("Block", " note ")]
+            : undefined,
+      });
+      expect(result.code).toBe("const x = 1/* note */;");
+    });
+
+    it("adds newline after block comment when value contains newline", () => {
+      const source = "const x = 1;";
+      const ast = parse(source);
+      const result = print(ast, {
+        source,
+        isUntouched: () => false,
+        getLeadingComments: (node) =>
+          node.type === "VariableDeclaration"
+            ? [makeComment("Block", "*\n * multi\n * line\n ")]
+            : undefined,
+      });
+      expect(result.code).toBe(`/**
+ * multi
+ * line
+ */
+const x = 1;`);
+    });
+
+    it("wraps return argument in parens when leading comment needs newline", () => {
+      const source = "function f() { return x; }";
+      const ast = parse(source);
+      const result = print(ast, {
+        source,
+        isUntouched: () => false,
+        getLeadingComments: (node) =>
+          node.type === "Identifier" && node.name === "x"
+            ? [makeComment("Line", " ASI-safe")]
+            : undefined,
+      });
+      expect(result.code).toBe("function f() {\nreturn (// ASI-safe\nx);\n}");
+    });
+
+    it("wraps throw argument in parens when leading comment needs newline", () => {
+      const source = "throw e;";
+      const ast = parse(source);
+      const result = print(ast, {
+        source,
+        isUntouched: () => false,
+        getLeadingComments: (node) =>
+          node.type === "Identifier"
+            ? [makeComment("Block", "\n  multi\n")]
+            : undefined,
+      });
+      expect(result.code).toBe("throw (/*\n  multi\n*/\ne);");
+    });
+
+    it("wraps yield argument in parens when leading comment needs newline", () => {
+      const source = "function* g() { yield val; }";
+      const ast = parse(source);
+      const result = print(ast, {
+        source,
+        isUntouched: () => false,
+        getLeadingComments: (node) =>
+          node.type === "Identifier" && node.name === "val"
+            ? [makeComment("Line", " line")]
+            : undefined,
+      });
+      expect(result.code).toBe("function* g() {\nyield (// line\nval);\n}");
+    });
+
+    it("wraps suffix ++ operand in parens when trailing comment needs newline", () => {
+      const source = "x++;";
+      const ast = parse(source);
+      const result = print(ast, {
+        source,
+        isUntouched: () => false,
+        getTrailingComments: (node) =>
+          node.type === "Identifier"
+            ? [makeComment("Line", " trail")]
+            : undefined,
+      });
+      expect(result.code).toBe("(x// trail\n)++;");
+    });
+
+    it("does not wrap when leading comment is single-line block comment", () => {
+      const source = "function f() { return x; }";
+      const ast = parse(source);
+      const result = print(ast, {
+        source,
+        isUntouched: () => false,
+        getLeadingComments: (node) =>
+          node.type === "Identifier" && node.name === "x"
+            ? [makeComment("Block", " ok ")]
+            : undefined,
+      });
+      expect(result.code).toBe("function f() {\nreturn /* ok */x;\n}");
+    });
+
+    it("does not wrap suffix ++ when trailing comment is single-line block comment", () => {
+      const source = "x++;";
+      const ast = parse(source);
+      const result = print(ast, {
+        source,
+        isUntouched: () => false,
+        getTrailingComments: (node) =>
+          node.type === "Identifier"
+            ? [makeComment("Block", " ok ")]
+            : undefined,
+      });
+      expect(result.code).toBe("x/* ok */++;");
+    });
+
+    it("prints multiple leading and trailing comments", () => {
+      const source = "function f() { return x; }";
+      const ast = parse(source);
+      const result = print(ast, {
+        source,
+        isUntouched: () => false,
+        getLeadingComments: (node) =>
+          node.type === "Identifier" && (node as AST.Identifier).name === "x"
+            ? [makeComment("Line", " first"), makeComment("Block", " second ")]
+            : undefined,
+        getTrailingComments: (node) =>
+          node.type === "Identifier" && (node as AST.Identifier).name === "x"
+            ? [makeComment("Line", " after")]
+            : undefined,
+      });
+      expect(result.code).toBe(
+        "function f() {\nreturn (// first\n/* second */x// after\n);\n}",
+      );
+    });
+  });
+
   it("structurally prints all JavaScript syntax preserving semantics", () => {
     const source = [
       // declarations

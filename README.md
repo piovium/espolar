@@ -7,8 +7,8 @@ ESTree-compatible AST printer designed for JavaScript/TypeScript language toolin
 - **Source preservation** — untouched nodes (configurable) are printed verbatim from the original source, preserving whitespace, comments, formatting, and ASI safety.
 - **Volar.js mappings** — generates `Mapping<Data>[]` mapping source ranges to generated ranges, with automatic merging of adjacent mappings.
 - **Full TypeScript support** — handles all `@typescript-eslint/types` AST node types (TSESTree), compatible with acorn-typescript parsed ASTs.
-- **Extensible** — every aspect is customizable: untouched detection, mapping data, printer overrides per node type.
-- **Zero runtime dependencies**.
+- **Extensible** — every aspect is customizable: untouched detection, mapping data, comments injection, printer overrides per node type.
+- **Zero runtime dependencies** — keeps the library minimal, only 10 kB gzipped.
 
 ## Install
 
@@ -77,13 +77,15 @@ Main entry point. Returns `PrintResult<Data>`.
 
 #### `PrintOptions<Data>`
 
-| Option               | Type                               | Description                                                                                |
-| -------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------ |
-| `source`             | `string`                           | The original source code (required)                                                        |
-| `isUntouched`        | `(node) => boolean \| SourceRange` | Determine if a node should be preserved from source. Default: checks `range`/`start`/`end` |
-| `getMappingData`     | `(node?) => Data`                  | Extract data for each mapping entry. Default: `() => ({})`                                 |
-| `combineMappingData` | `(left, right) => Data`            | Merge data when adjacent mappings are combined. Default: returns `right`                   |
-| `printers`           | `Printers<Data>`                   | Override printers for specific `AST_NODE_TYPES`                                            |
+| Option                | Type                               | Description                                                                                |
+| --------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------ |
+| `source`              | `string`                           | The original source code (required)                                                        |
+| `isUntouched`         | `(node) => boolean \| SourceRange` | Determine if a node should be preserved from source. Default: checks `range`/`start`/`end` |
+| `getMappingData`      | `(node?) => Data`                  | Extract data for each mapping entry. Default: `() => ({})`                                 |
+| `combineMappingData`  | `(left, right) => Data`            | Merge data when adjacent mappings are combined. Default: returns `right`                   |
+| `printers`            | `Printers<Data>`                   | Override printers for specific `AST_NODE_TYPES`                                            |
+| `getLeadingComments`  | `(node) => Comment[] \| undefined` | Return comments to print before a touched node                                             |
+| `getTrailingComments` | `(node) => Comment[] \| undefined` | Return comments to print after a touched node                                              |
 
 #### `PrintResult<Data>`
 
@@ -106,6 +108,8 @@ The context object passed to each printer function.
 | `writeNodeListWithSourceGaps(nodes, fallbackSeparator)` | Print a list, copying source gaps between nodes |
 | `writePreservedNode(node)`                              | Force-preserve a node from source               |
 | `writeSource(start, end, data)`                         | Copy source range and add mapping               |
+| `getLeadingComments(node)`                              | Query leading comments                          |
+| `getTrailingComments(node)`                             | Query trailing comments                         |
 
 ### Exported helpers
 

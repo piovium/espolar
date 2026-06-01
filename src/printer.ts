@@ -19,6 +19,17 @@ interface InternalPrinterContext<Data> extends PrinterContext<Data> {
   result(): PrintResult<Data>;
 }
 
+function writeComment(context: InternalPrinterContext<unknown>, comment: AST.Comment): void {
+  if (comment.type === "Line") {
+    context.write("//" + comment.value + "\n");
+  } else {
+    context.write("/*" + comment.value + "*/");
+    if (comment.value.includes("\n")) {
+      context.write("\n");
+    }
+  }
+}
+
 export function print<Data>(
   node: AST.Node,
   options: PrintOptions<Data>,
@@ -63,6 +74,8 @@ function createPrinterContext<Data>(
     ...defaultPrinters,
     ...options.printers,
   };
+  const getLeadingComments = options.getLeadingComments ?? (() => undefined);
+  const getTrailingComments = options.getTrailingComments ?? (() => undefined);
 
   const appendMapping = (
     sourceRange: SourceRange,
@@ -124,9 +137,23 @@ function createPrinterContext<Data>(
         throw new Error(`No printer registered for node type ${node.type}`);
       }
 
+      const leadingComments = getLeadingComments(node);
+      if (leadingComments) {
+        for (const c of leadingComments) {
+          writeComment(context, c);
+        }
+      }
+
       const generatedStart = generatedOffset;
       printer(node, context);
       const generatedEnd = generatedOffset;
+
+      const trailingComments = getTrailingComments(node);
+      if (trailingComments) {
+        for (const c of trailingComments) {
+          writeComment(context, c);
+        }
+      }
       // If children nodes don't emit any mapping but the parent node itself
       // can produce mapping, add that mapping
       const lastMappingGeneratedEnd = mappings.at(-1)?.generatedEnd ?? 0;
@@ -201,6 +228,8 @@ function createPrinterContext<Data>(
       }
       context.writeSource(range.start, range.end, getMappingData(node));
     },
+    getLeadingComments,
+    getTrailingComments,
     writeSource(start, end, data) {
       if (end <= start) {
         return;

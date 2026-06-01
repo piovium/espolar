@@ -66,6 +66,11 @@ const OPERATOR_PRECEDENCE: Record<string, number> = {
   "**": 13,
 };
 
+function commentNeedsNewline(comment: AST.Comment): boolean {
+  if (comment.type === "Line") return true;
+  return comment.value.includes("\n");
+}
+
 function needsParens(
   node: AST.Expression | AST.PrivateIdentifier,
   parent:
@@ -380,7 +385,12 @@ function printReturnStatement(
   context.write("return");
   if (statement.argument) {
     context.write(" ");
+    const leadingComments = context.getLeadingComments?.(statement.argument);
+    const needsParensASi =
+      leadingComments?.some((c) => commentNeedsNewline(c)) ?? false;
+    if (needsParensASi) context.write("(");
     context.writeNode(statement.argument);
+    if (needsParensASi) context.write(")");
   }
   context.write(";");
 }
@@ -391,7 +401,12 @@ function printThrowStatement(
 ): void {
   context.write("throw ");
   if (statement.argument) {
+    const leadingComments = context.getLeadingComments?.(statement.argument);
+    const needsParensASi =
+      leadingComments?.some((c) => commentNeedsNewline(c)) ?? false;
+    if (needsParensASi) context.write("(");
     context.writeNode(statement.argument);
+    if (needsParensASi) context.write(")");
   }
   context.write(";");
 }
@@ -659,7 +674,12 @@ function printUpdateExpression(
     context.write(expr.operator);
     context.writeNode(expr.argument);
   } else {
+    const trailingComments = context.getTrailingComments?.(expr.argument);
+    const needsParensASi =
+      trailingComments?.some((c) => commentNeedsNewline(c)) ?? false;
+    if (needsParensASi) context.write("(");
     context.writeNode(expr.argument);
+    if (needsParensASi) context.write(")");
     context.write(expr.operator);
   }
 }
@@ -720,7 +740,12 @@ function printYieldExpression(
   context.write(expr.delegate === true ? "yield*" : "yield");
   if (expr.argument) {
     context.write(" ");
+    const leadingComments = context.getLeadingComments?.(expr.argument);
+    const needsParensASi =
+      leadingComments?.some((c) => commentNeedsNewline(c)) ?? false;
+    if (needsParensASi) context.write("(");
     context.writeNode(expr.argument);
+    if (needsParensASi) context.write(")");
   }
 }
 

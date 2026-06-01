@@ -13,6 +13,8 @@ export interface PrintOptions<Data> {
   getMappingData?: (node?: AST.Node | null) => Data;
   combineMappingData?: (left: Data, right: Data) => Data;
   printers?: Printers<Data>;
+  getLeadingComments?: (node: AST.Node) => AST.Comment[] | undefined;
+  getTrailingComments?: (node: AST.Node) => AST.Comment[] | undefined;
 }
 
 export interface PrinterContext<Data> {
@@ -30,6 +32,8 @@ export interface PrinterContext<Data> {
   ): void;
   writePreservedNode(node: AST.Node): void;
   writeSource(start: number, end: number, data: Data): void;
+  getLeadingComments: (node: AST.Node) => AST.Comment[] | undefined;
+  getTrailingComments: (node: AST.Node) => AST.Comment[] | undefined;
 }
 
 export type NodePrinter<Key extends AST_NODE_TYPES, Data> = (
