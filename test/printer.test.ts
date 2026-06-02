@@ -332,7 +332,7 @@ describe("print", () => {
       expect(
         callParen!.generatedOffsets[0] + (7 - callParen!.sourceOffsets[0]),
       ).toBe(7);
-      expect(callParen!.data).toEqual({ label: "gap" });
+      expect(callParen!.data).toEqual({ label: "Identifier" });
 
       const newParen = result.mappings.find(
         (m) =>
@@ -342,7 +342,7 @@ describe("print", () => {
       expect(
         newParen!.generatedOffsets[0] + (21 - newParen!.sourceOffsets[0]),
       ).toBe(21);
-      expect(newParen!.data).toEqual({ label: "gap" });
+      expect(newParen!.data).toEqual({ label: "Identifier" });
     });
 
     it("supports getMappingData for leaf node mappings", () => {
