@@ -230,6 +230,33 @@ describe("print", () => {
       expect(result.mappings[1].generatedOffsets).toEqual([6]);
     });
 
+    it("merges adjacent mappings with non-zero source offsets", () => {
+      const source = "0123456789";
+      const node = {
+        type: "Identifier",
+        start: 2,
+        end: 8,
+        name: "chunk",
+      } as AST.Identifier;
+
+      const result = print(node, {
+        source,
+        isUntouched: () => false,
+        printers: {
+          Identifier: (_node, context) => {
+            context.writeSource(2, 5, null);
+            context.writeSource(5, 8, null);
+          },
+        },
+      });
+
+      expect(result.code).toBe("234567");
+      expect(result.mappings).toHaveLength(1);
+      expect(result.mappings[0].sourceOffsets).toEqual([2]);
+      expect(result.mappings[0].generatedOffsets).toEqual([0]);
+      expect(result.mappings[0].lengths).toEqual([6]);
+    });
+
     it("throws when writePreservedNode has no source range", () => {
       const node = { type: "Identifier", name: "nope" } as AST.Identifier;
       const result = print(node, {
