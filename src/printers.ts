@@ -222,6 +222,7 @@ export const defaultPrinters = {
   ImportDeclaration: printImportDeclaration,
   ImportExpression: printImportExpression,
   ImportSpecifier: printImportSpecifier,
+  ImportDefaultSpecifier: printImportDefaultSpecifier,
   ExportNamedDeclaration: printExportNamedDeclaration,
   ExportDefaultDeclaration: printExportDefaultDeclaration,
   ExportAllDeclaration: printExportAllDeclaration,
@@ -1357,7 +1358,7 @@ function printImportDeclaration(
 
   for (const s of specifiers) {
     if (s.type === "ImportDefaultSpecifier") {
-      context.writeNode(s.local);
+      context.writeNode(s);
       wroteDefault = true;
     }
   }
@@ -1408,6 +1409,13 @@ function printImportExpression(
     context.writeNode(node.options);
   }
   context.write(")");
+}
+
+function printImportDefaultSpecifier(
+  node: AST.ImportDefaultSpecifier,
+  context: PrinterContext,
+): void {
+  context.writeNode(node.local);
 }
 
 function printImportSpecifier(
