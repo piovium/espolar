@@ -15,6 +15,13 @@ function parse(source: string): AST.Program {
   }) as AST.Program;
 }
 
+function getGeneratedOffset(
+  mapping: { sourceOffsets: number[]; generatedOffsets: number[] },
+  sourceOffset: number,
+): number {
+  return mapping.generatedOffsets[0] + (sourceOffset - mapping.sourceOffsets[0]);
+}
+
 describe("print", () => {
   describe("untouched preservation", () => {
     it("preserves an untouched program byte-for-byte", () => {
@@ -329,9 +336,7 @@ describe("print", () => {
           m.sourceOffsets[0] <= 7 && m.sourceOffsets[0] + m.lengths[0] >= 8,
       );
       expect(callParen).toBeDefined();
-      expect(
-        callParen!.generatedOffsets[0] + (7 - callParen!.sourceOffsets[0]),
-      ).toBe(7);
+      expect(getGeneratedOffset(callParen!, 7)).toBe(7);
       expect(callParen!.data).toEqual({ label: "Identifier" });
 
       const newParen = result.mappings.find(
@@ -339,9 +344,7 @@ describe("print", () => {
           m.sourceOffsets[0] <= 21 && m.sourceOffsets[0] + m.lengths[0] >= 22,
       );
       expect(newParen).toBeDefined();
-      expect(
-        newParen!.generatedOffsets[0] + (21 - newParen!.sourceOffsets[0]),
-      ).toBe(21);
+      expect(getGeneratedOffset(newParen!, 21)).toBe(21);
       expect(newParen!.data).toEqual({ label: "Identifier" });
     });
 
