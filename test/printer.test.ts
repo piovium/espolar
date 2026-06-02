@@ -329,7 +329,9 @@ describe("print", () => {
           m.sourceOffsets[0] <= 7 && m.sourceOffsets[0] + m.lengths[0] >= 8,
       );
       expect(callParen).toBeDefined();
-      expect(callParen!.generatedOffsets[0]).toBe(7);
+      expect(
+        callParen!.generatedOffsets[0] + (7 - callParen!.sourceOffsets[0]),
+      ).toBe(7);
       expect(callParen!.data).toEqual({ label: "gap" });
 
       const newParen = result.mappings.find(
@@ -337,7 +339,9 @@ describe("print", () => {
           m.sourceOffsets[0] <= 21 && m.sourceOffsets[0] + m.lengths[0] >= 22,
       );
       expect(newParen).toBeDefined();
-      expect(newParen!.generatedOffsets[0]).toBe(21);
+      expect(
+        newParen!.generatedOffsets[0] + (21 - newParen!.sourceOffsets[0]),
+      ).toBe(21);
       expect(newParen!.data).toEqual({ label: "gap" });
     });
 
