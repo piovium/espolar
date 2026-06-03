@@ -75,8 +75,8 @@ Main entry point. Returns `PrintResult<Data>`.
 | --------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------ |
 | `source`              | `string`                           | The original source code (required)                                                        |
 | `isUntouched`         | `(node) => boolean \| SourceRange` | Determine if a node should be preserved from source. Default: checks `range`/`start`/`end` |
-| `getMappingData`      | `(node?) => Data`                  | Extract data for each mapping entry. Default: `() => ({})`                                 |
-| `combineMappingData`  | `(left, right) => Data`            | Merge data when adjacent mappings are combined. Default: returns `right`                   |
+| `getMappingData`      | `(node?) => Data`                  | Extract data for each mapping entry. Default: `() => undefined`                            |
+| `combineMappingData`  | `(left, right) => Data`            | Merge data when adjacent mappings are combined. Default: throws if `left !== right`        |
 | `printers`            | `Printers<Data>`                   | Override printers for specific `AST_NODE_TYPES`                                            |
 | `getLeadingComments`  | `(node) => Comment[] \| undefined` | Return comments to print before a touched node                                             |
 | `getTrailingComments` | `(node) => Comment[] \| undefined` | Return comments to print after a touched node                                              |

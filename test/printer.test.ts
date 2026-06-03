@@ -1,7 +1,7 @@
 import { Parser } from "acorn";
 import { tsPlugin } from "@sveltejs/acorn-typescript";
 import { describe, expect, it } from "vitest";
-import { print } from "../src/index.ts";
+import { defaultCombineMappingData, print } from "../src/index.ts";
 import type { AST, Comment } from "../src/types.ts";
 
 const TsParser = Parser.extend(tsPlugin());
@@ -109,8 +109,8 @@ describe("print", () => {
         isUntouched: () => false,
         printers: {
           Identifier: (_node, context) => {
-            context.writeSource(2, 5, null);
-            context.writeSource(5, 8, null);
+            context.writeSource(2, 5);
+            context.writeSource(5, 8);
           },
         },
       });
@@ -192,7 +192,7 @@ describe("print", () => {
             context.write("");
             context.writeNode(null);
             context.writeNodeListWithSourceGaps(program.body, "\n");
-            context.writeSource(0, 0, null);
+            context.writeSource(0, 0);
             context.write("|");
             context.writeNodeList([literal, null, literal], ",");
           },
@@ -230,7 +230,7 @@ describe("print", () => {
         name: "hello world",
       } as AST.Identifier;
 
-      const result = print<{ label: string }>(node, {
+      const result = print(node, {
         source,
         isUntouched: () => false,
         printers: {
@@ -309,6 +309,7 @@ describe("print", () => {
         source,
         isUntouched: () => false,
         getMappingData: (node) => ({ label: node?.type ?? "gap" }),
+        combineMappingData: (left, right) => right,
         experimentalGetLeftParenSourceRange: (node) => {
           if (node.type === "CallExpression") {
             // "a = foo(bar)" — "(" at position 7
@@ -353,6 +354,7 @@ describe("print", () => {
         source,
         isUntouched: () => false,
         getMappingData: (node) => node?.type,
+        combineMappingData: (left, right) => right || left,
       });
 
       expect(result.code).toBe("const total = add(1, 2);");
@@ -873,5 +875,110 @@ const x = 1;`);
     });
 
     expect(result.code).toMatchSnapshot();
+  });
+});
+
+describe("createExtraMapping", () => {
+  it("includes extra mappings in result without merging", () => {
+    const source = "0123456789";
+
+    const result = print(
+      {
+        type: "Identifier",
+        start: 0,
+        end: 10,
+        name: "hello",
+      } as AST.Identifier,
+      {
+        source,
+        isUntouched: () => false,
+        printers: {
+          Identifier: (_node, context) => {
+            context.writeMapped("hello", 0, 5);
+            context.createExtraMapping(
+              { start: 5, end: 10 },
+              context.generatedOffset,
+              context.generatedOffset + 5,
+            );
+            context.write("world");
+          },
+        },
+      },
+    );
+
+    expect(result.code).toBe("helloworld");
+    expect(result.mappings).toHaveLength(2);
+    expect(result.mappings[0].sourceOffsets).toEqual([0]);
+    expect(result.mappings[0].lengths).toEqual([5]);
+    expect(result.mappings[1].sourceOffsets).toEqual([5]);
+    expect(result.mappings[1].lengths).toEqual([5]);
+  });
+
+  it("extra mappings are not merged with regular ones even when adjacent", () => {
+    const source = "0123456789";
+
+    const result = print(
+      {
+        type: "Identifier",
+        start: 0,
+        end: 10,
+        name: "hello",
+      } as AST.Identifier,
+      {
+        source,
+        isUntouched: () => false,
+        printers: {
+          Identifier: (_node, context) => {
+            context.writeSource(0, 5);
+            context.createExtraMapping(
+              { start: 5, end: 10 },
+              context.generatedOffset,
+              context.generatedOffset + 5,
+            );
+            context.writeSource(5, 10);
+          },
+        },
+      },
+    );
+
+    expect(result.mappings).toHaveLength(2);
+    expect(result.mappings.map((m) => m.sourceOffsets[0])).toEqual([0, 5]);
+  });
+
+  it("extra mappings carry custom data", () => {
+    const source = "hello";
+
+    const result = print<{ label: string }>(
+      {
+        type: "Identifier",
+        start: 0,
+        end: 5,
+        name: "hello",
+      } as AST.Identifier,
+      {
+        source,
+        isUntouched: () => false,
+        getMappingData: () => ({ label: "" }),
+        printers: {
+          Identifier: (_node, context) => {
+            context.write("hi");
+            context.createExtraMapping(
+              { start: 0, end: 5 },
+              0,
+              2,
+              { label: "extra" },
+            );
+          },
+        },
+      },
+    );
+
+    expect(result.code).toBe("hi");
+    const extra = result.mappings.find((m) => m.data?.label === "extra");
+    expect(extra).toBeDefined();
+    expect(extra!.sourceOffsets).toEqual([0]);
+    expect(extra!.lengths).toEqual([5]);
+    expect(extra!.generatedOffsets).toEqual([0]);
+    expect(extra!.generatedLengths).toEqual([2]);
   });
 });

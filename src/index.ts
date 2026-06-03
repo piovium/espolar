@@ -1,6 +1,5 @@
 export {
   defaultCombineMappingData,
-  defaultGetMappingData,
   defaultIsUntouched,
   print,
 } from "./printer.ts";

@@ -16,6 +16,8 @@ import {
 } from "./mappings.ts";
 
 interface InternalPrinterContext extends PrinterContext<any> {
+  // make typescript happy about complex types
+  options: any;
   result(): PrintResult<any>;
 }
 
@@ -30,19 +32,19 @@ function writeComment(context: InternalPrinterContext, comment: Comment): void {
   }
 }
 
-export function print<Data>(
+export function print<Data = undefined>(
   node: AST.Node,
   options: PrintOptions<Data>,
 ): PrintResult<Data>;
-export function print<Data>(
+export function print<Data = undefined>(
   node: import("estree").Node,
   options: PrintOptions<Data>,
 ): PrintResult<Data>;
-export function print<Data>(
+export function print<Data = undefined>(
   node: NodeLike,
   options: PrintOptions<Data>,
 ): PrintResult<Data>;
-export function print<Data>(
+export function print<Data = undefined>(
   node: unknown,
   options: PrintOptions<Data>,
 ): PrintResult<Data> {
@@ -55,15 +57,13 @@ export function defaultIsUntouched(node: AST.Node): boolean | SourceRange {
   return getNodeRange(node) || false;
 }
 
-export function defaultGetMappingData(node?: AST.Node | null): unknown {
-  return {};
-}
-
-export function defaultCombineMappingData(
-  left: unknown,
-  right: unknown,
-): unknown {
-  return right;
+export function defaultCombineMappingData<T>(left: T, right: T): T {
+  if (left === right) {
+    return left;
+  }
+  throw new Error(
+    "Cannot combine mapping data with different values when no custom combineMappingData function is provided",
+  );
 }
 
 function createPrinterContext<Data>(
@@ -71,17 +71,13 @@ function createPrinterContext<Data>(
 ): InternalPrinterContext {
   const chunks: string[] = [];
   const mappings: InternalMapping<Data>[] = [];
+  const extraMappings: InternalMapping<Data>[] = [];
   let generatedOffset = 0;
 
   const isUntouched = options.isUntouched ?? defaultIsUntouched;
-  const getMappingData =
-    options.getMappingData ??
-    (defaultGetMappingData as (node?: AST.Node | null) => Data);
+  const getMappingData = options.getMappingData ?? ((): any => undefined);
   const combineMappingData =
-    options.combineMappingData ??
-    (options.getMappingData
-      ? (left: Data) => left
-      : (defaultCombineMappingData as (left: Data, right: Data) => Data));
+    options.combineMappingData ?? defaultCombineMappingData;
   const printers: Printers<Data> = {
     ...defaultPrinters,
     ...options.printers,
@@ -267,10 +263,19 @@ function createPrinterContext<Data>(
       context.writeSource(range.start, range.end, getMappingData(node));
     },
     appendMapping,
+    createExtraMapping(sourceRange, generatedStart, generatedEnd, data) {
+      extraMappings.push({
+        sourceStart: sourceRange.start,
+        sourceEnd: sourceRange.end,
+        generatedStart,
+        generatedEnd,
+        data,
+      });
+    },
     result() {
       return {
         code: chunks.join(""),
-        mappings: mappings.map(toVolarMapping),
+        mappings: [...mappings, ...extraMappings].map(toVolarMapping),
       };
     },
   };

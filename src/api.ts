@@ -7,10 +7,9 @@ export interface PrintResult<Data> {
   mappings: Mapping<Data>[];
 }
 
-export interface PrintOptions<Data> {
+export interface PrintOptionsBase<Data> {
   source: string;
   isUntouched?: (node: AST.Node) => boolean | SourceRange;
-  getMappingData?: (node?: AST.Node | null) => Data;
   combineMappingData?: (left: Data, right: Data) => Data;
   printers?: Printers<Data>;
   getLeadingComments?: (node: AST.Node) => Comment[] | undefined;
@@ -18,9 +17,9 @@ export interface PrintOptions<Data> {
   /**
    * Provide additional source range for the left parenthesis of `CallExpression` and `NewExpression`.
    * This is useful for language tools that want to provide signature hints when user enter `(`.
-   * 
+   *
    * @notes This hook will not interact with parentheses around the callee.
-   * 
+   *
    * @param node The `CallExpression` or `NewExpression` node.
    * @returns The source range of the left parenthesis, `undefined` if not available.
    */
@@ -28,6 +27,19 @@ export interface PrintOptions<Data> {
     node: AST.CallExpression | AST.NewExpression,
   ) => SourceRange | undefined;
 }
+
+export interface MappingDataOptions<Data> {
+  getMappingData: (node?: AST.Node | null) => Data;
+}
+
+type MappingDataUndefinedOptions = {
+  [K in keyof MappingDataOptions<0>]?: undefined;
+};
+
+export type PrintOptions<Data> = PrintOptionsBase<Data> &
+  ([Data] extends [undefined]
+    ? MappingDataUndefinedOptions
+    : MappingDataOptions<Data>);
 
 export interface PrinterContext<Data = any> {
   readonly options: PrintOptions<Data>;
@@ -52,6 +64,13 @@ export interface PrinterContext<Data = any> {
   writeSource(start: number, end: number, data?: Data): void;
   writePreservedNode(node: AST.Node): void;
   appendMapping(
+    sourceRange: SourceRange,
+    generatedStart: number,
+    generatedEnd: number,
+    data?: Data,
+  ): void;
+  /** Extra mappings that won't be merged automatically */
+  createExtraMapping(
     sourceRange: SourceRange,
     generatedStart: number,
     generatedEnd: number,
