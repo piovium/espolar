@@ -15,13 +15,6 @@ function parse(source: string): AST.Program {
   }) as AST.Program;
 }
 
-function getGeneratedOffset(
-  mapping: { sourceOffsets: number[]; generatedOffsets: number[] },
-  sourceOffset: number,
-): number {
-  return mapping.generatedOffsets[0] + (sourceOffset - mapping.sourceOffsets[0]);
-}
-
 describe("print", () => {
   describe("untouched preservation", () => {
     it("preserves an untouched program byte-for-byte", () => {
@@ -100,6 +93,33 @@ describe("print", () => {
         isUntouched: (node) => node.type !== "Program",
       });
       expect(result.code).toBe(source);
+    });
+
+    it("merges adjacent mappings with non-zero source offsets", () => {
+      const source = "0123456789";
+      const node = {
+        type: "Identifier",
+        start: 2,
+        end: 8,
+        name: "chunk",
+      } as AST.Identifier;
+
+      const result = print(node, {
+        source,
+        isUntouched: () => false,
+        printers: {
+          Identifier: (_node, context) => {
+            context.writeSource(2, 5, null);
+            context.writeSource(5, 8, null);
+          },
+        },
+      });
+
+      expect(result.code).toBe("234567");
+      expect(result.mappings).toHaveLength(1);
+      expect(result.mappings[0].sourceOffsets).toEqual([2]);
+      expect(result.mappings[0].generatedOffsets).toEqual([0]);
+      expect(result.mappings[0].lengths).toEqual([6]);
     });
 
     it("supports getMappingData without combineMappingData", () => {
@@ -237,33 +257,6 @@ describe("print", () => {
       expect(result.mappings[1].generatedOffsets).toEqual([6]);
     });
 
-    it("merges adjacent mappings with non-zero source offsets", () => {
-      const source = "0123456789";
-      const node = {
-        type: "Identifier",
-        start: 2,
-        end: 8,
-        name: "chunk",
-      } as AST.Identifier;
-
-      const result = print(node, {
-        source,
-        isUntouched: () => false,
-        printers: {
-          Identifier: (_node, context) => {
-            context.writeSource(2, 5, null);
-            context.writeSource(5, 8, null);
-          },
-        },
-      });
-
-      expect(result.code).toBe("234567");
-      expect(result.mappings).toHaveLength(1);
-      expect(result.mappings[0].sourceOffsets).toEqual([2]);
-      expect(result.mappings[0].generatedOffsets).toEqual([0]);
-      expect(result.mappings[0].lengths).toEqual([6]);
-    });
-
     it("throws when writePreservedNode has no source range", () => {
       const node = { type: "Identifier", name: "nope" } as AST.Identifier;
       const result = print(node, {
@@ -335,16 +328,20 @@ describe("print", () => {
         (m) =>
           m.sourceOffsets[0] <= 7 && m.sourceOffsets[0] + m.lengths[0] >= 8,
       );
+      // foo(bar
       expect(callParen).toBeDefined();
-      expect(getGeneratedOffset(callParen!, 7)).toBe(7);
+      expect(callParen!.sourceOffsets[0]).toBe(4);
+      expect(callParen!.lengths[0]).toBe(7);
       expect(callParen!.data).toEqual({ label: "Identifier" });
 
+      // Baz(qux
       const newParen = result.mappings.find(
         (m) =>
           m.sourceOffsets[0] <= 21 && m.sourceOffsets[0] + m.lengths[0] >= 22,
       );
       expect(newParen).toBeDefined();
-      expect(getGeneratedOffset(newParen!, 21)).toBe(21);
+      expect(newParen!.sourceOffsets[0]).toBe(18);
+      expect(newParen!.lengths[0]).toBe(7);
       expect(newParen!.data).toEqual({ label: "Identifier" });
     });
 
