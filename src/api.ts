@@ -53,13 +53,12 @@ export interface PrinterContext<Data = any> {
     data?: Data,
   ): void;
   writeNode(node: AST.Node | null | undefined): void;
-  writeNodeList(
-    nodes: readonly (AST.Node | null | undefined)[],
-    separator: string,
+  writeNodeList(nodes: readonly (AST.Node | null)[], separator: string): void;
+  writeExpressionListWithCommaSep(
+    nodes: readonly (AST.Expression | AST.SpreadElement | null)[],
   ): void;
-  writeNodeListWithSourceGaps(
-    nodes: readonly (AST.Node | null | undefined)[],
-    fallbackSeparator: string,
+  writeNodeListWithNewLineSep(
+    nodes: readonly (AST.ProgramStatement | AST.ClassElement)[],
   ): void;
   writeSource(start: number, end: number, data?: Data): void;
   writePreservedNode(node: AST.Node): void;

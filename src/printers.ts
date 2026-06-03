@@ -1,90 +1,159 @@
 import type { PrinterContext, Printers } from "./api.ts";
-import type { AST, Comment } from "./types.ts";
+import type { AST, AST_NODE_TYPES, Comment } from "./types.ts";
 
-const EXPRESSIONS_PRECEDENCE: Record<string, number> = {
+const EXPRESSIONS_PRECEDENCE = {
+  // LHS of =, must NOT parenthesized
   ArrayPattern: 20,
   ObjectPattern: 20,
-  ArrayExpression: 20,
-  TaggedTemplateExpression: 20,
-  ThisExpression: 20,
-  Identifier: 20,
-  TemplateLiteral: 20,
-  Super: 20,
-  SequenceExpression: 20,
-  MemberExpression: 19,
-  MetaProperty: 19,
-  CallExpression: 19,
-  ChainExpression: 19,
-  ImportExpression: 19,
-  NewExpression: 19,
-  Literal: 18,
-  TSSatisfiesExpression: 18,
-  TSInstantiationExpression: 18,
-  TSNonNullExpression: 18,
-  TSTypeAssertion: 18,
-  AwaitExpression: 17,
-  ClassExpression: 17,
-  FunctionExpression: 17,
-  ObjectExpression: 17,
-  UnaryExpression: 16,
-  UpdateExpression: 16,
-  TSAsExpression: 15,
-  BinaryExpression: 14,
-  LogicalExpression: 13,
-  ConditionalExpression: 4,
-  ArrowFunctionExpression: 3,
-  AssignmentExpression: 3,
-  YieldExpression: 2,
-  RestElement: 1,
-};
 
-const OPERATOR_PRECEDENCE: Record<string, number> = {
-  "||": 2,
-  "&&": 3,
-  "??": 4,
-  "|": 5,
-  "^": 6,
-  "&": 7,
-  "==": 8,
-  "!=": 8,
-  "===": 8,
-  "!==": 8,
+  // PrimaryExpression
+  // @ts-expect-error acorn-typescript compat
+  ParenthesizedExpression: 18,
+  ThisExpression: 18,
+  Super: 18, // like ThisExpression
+  Identifier: 18,
+  PrivateIdentifier: 18, // LHS of in
+  Literal: 18,
+  ClassExpression: 18,
+  FunctionExpression: 18,
+  ObjectExpression: 18,
+  ArrayExpression: 18,
+  TemplateLiteral: 18,
+  // https://react.github.io/jsx/
+  JSXElement: 18,
+  JSXFragment: 18,
+
+  MetaProperty: 17,
+  MemberExpression: 17,
+  // Same precedence as MemberExpression, e.g. foo.bar<T>
+  TSInstantiationExpression: 17,
+  // Same precedence as MemberExpression, e.g. foo!.bar
+  TSNonNullExpression: 17,
+  ChainExpression: 17,
+  NewExpression: 17, // only with argument list, 16 if not (we don't print this form)
+  CallExpression: 17,
+  TaggedTemplateExpression: 17,
+  ImportExpression: 17,
+
+  // postfix operators
+  UpdateExpression: 15,
+  // prefix operators
+  UnaryExpression: 14,
+  AwaitExpression: 14,
+  // behaves like postfix operators (e.g. cannot be part of LHS of **)
+  TSTypeAssertion: 14,
+
+  // as/satisfies have same precedence as relational operators
+  TSAsExpression: 9,
+  TSSatisfiesExpression: 9,
+
+  // ranges from 13-5 depending on operator
+  BinaryExpression: 13,
+  LogicalExpression: 4,
+
+  AssignmentExpression: 2,
+  ConditionalExpression: 2,
+  YieldExpression: 2,
+  ArrowFunctionExpression: 2,
+  SpreadElement: 2,
+
+  SequenceExpression: 1,
+} as const satisfies Partial<Record<AST.Expression["type"], number>>;
+
+const OPERATOR_PRECEDENCE = {
+  "**": 13,
+  "*": 12,
+  "%": 12,
+  "/": 12,
+  "+": 11,
+  "-": 11,
+  "<<": 10,
+  ">>": 10,
+  ">>>": 10,
   "<": 9,
   ">": 9,
   "<=": 9,
   ">=": 9,
   in: 9,
   instanceof: 9,
-  "<<": 10,
-  ">>": 10,
-  ">>>": 10,
-  "+": 11,
-  "-": 11,
-  "*": 12,
-  "%": 12,
-  "/": 12,
-  "**": 13,
+  "==": 8,
+  "!=": 8,
+  "===": 8,
+  "!==": 8,
+  "&": 7,
+  "^": 6,
+  "|": 5,
+  "&&": 4,
+  "??": 3,
+  "||": 3,
+} as const satisfies Record<
+  (AST.BinaryExpression | AST.LogicalExpression)["operator"],
+  number
+>;
+
+const ASSOCIATIVE: Record<number, "left" | "right"> = {
+  [EXPRESSIONS_PRECEDENCE.MemberExpression]: "left",
+  [EXPRESSIONS_PRECEDENCE.UpdateExpression]: "left",
+  [EXPRESSIONS_PRECEDENCE.UnaryExpression]: "right",
+  [OPERATOR_PRECEDENCE["**"]]: "right",
+  [OPERATOR_PRECEDENCE["*"]]: "left",
+  [OPERATOR_PRECEDENCE["+"]]: "left",
+  [OPERATOR_PRECEDENCE["<"]]: "left",
+  [OPERATOR_PRECEDENCE["==="]]: "left",
+  [OPERATOR_PRECEDENCE["&"]]: "left",
+  [OPERATOR_PRECEDENCE["^"]]: "left",
+  [OPERATOR_PRECEDENCE["|"]]: "left",
+  [OPERATOR_PRECEDENCE["&&"]]: "left",
+  [OPERATOR_PRECEDENCE["||"]]: "left",
+  [EXPRESSIONS_PRECEDENCE.AssignmentExpression]: "right",
 };
 
-function commentNeedsNewline(comment: Comment): boolean {
-  if (comment.type === "Line") return true;
-  return comment.value.includes("\n");
+function getPrecedence(node: AST.Expression | AST.PrivateIdentifier): number {
+  if (node.type === "BinaryExpression" || node.type === "LogicalExpression") {
+    return (
+      OPERATOR_PRECEDENCE[node.operator] ?? EXPRESSIONS_PRECEDENCE[node.type]
+    );
+  }
+  return EXPRESSIONS_PRECEDENCE[node.type] ?? 20;
 }
 
-function needsParens(
+/**
+ * Check whether the operand of a Binary/Logical/AssignmentExpression needs parentheses.
+ * @param node
+ * @param parent
+ * @param where
+ * @returns
+ */
+function operandOfBinaryExprNeedsParens(
   node: AST.Expression | AST.PrivateIdentifier,
   parent:
+    | AST.MemberExpression
+    | AST.TSNonNullExpression
+    | AST.CallExpression
+    | AST.NewExpression
+    | AST.TaggedTemplateExpression
+    | AST.TSAsExpression
+    | AST.TSSatisfiesExpression
     | AST.BinaryExpression
     | AST.LogicalExpression
-    | AST.AssignmentExpression,
-  isRight: boolean,
+    | AST.AssignmentExpression
+    | AST.ConditionalExpression,
+  where: "left" | "right",
 ): boolean {
+  const precedence = getPrecedence(node);
+  const parentPrecedence = getPrecedence(parent);
+
+  // In a BinaryExpression where LHS have a TS postfix, e.g.:
+  //   (0 as number) & 1;
+  //   (0 as number) | 1;
+  // If op is & or |, then LHS should be parenthesized to disambiguate;
+  // otherwise, no need to parenthesize.
   if (
-    node.type === "PrivateIdentifier" ||
-    node.type === "Identifier" ||
-    node.type === "Super"
+    where === "left" &&
+    (node.type === "TSAsExpression" || node.type === "TSSatisfiesExpression") &&
+    parent.type === "BinaryExpression"
   ) {
-    return false;
+    return parent.operator === "&" || parent.operator === "|";
   }
 
   // LogicalExpression mixed with ?? requires parens
@@ -96,36 +165,77 @@ function needsParens(
     return true;
   }
 
-  const precedence = EXPRESSIONS_PRECEDENCE[node.type] ?? 20;
-  const parentPrecedence = EXPRESSIONS_PRECEDENCE[parent.type] ?? 20;
+  // optional chain cannot appeared as LHS of MemberExpression-like
+  if (
+    precedence === EXPRESSIONS_PRECEDENCE.MemberExpression &&
+    node.type === "ChainExpression"
+  ) {
+    return true;
+  }
+  if (
+    parent.type === "NewExpression" &&
+    hasCallExpression(node as AST.Expression)
+  ) {
+    // new X(), X cannot contain CallExpression
+    return true;
+  }
+
+  if (
+    parent.type === "BinaryExpression" &&
+    parent.operator === "**" &&
+    precedence === EXPRESSIONS_PRECEDENCE.UnaryExpression
+  ) {
+    // LHS of ** cannot have prefix operators, according to ES spec.
+    return true;
+  }
 
   if (precedence !== parentPrecedence) {
-    // ** is right-to-left associative: `a ** b ** c` => `a ** (b ** c)`
-    if (
-      !isRight &&
-      precedence === 15 &&
-      parentPrecedence === 14 &&
-      parent.operator === "**"
-    ) {
-      return false;
-    }
     return precedence < parentPrecedence;
   }
 
-  if (precedence !== 13 && precedence !== 14) {
-    return false;
-  }
+  const associative = ASSOCIATIVE[precedence] ?? "left";
+  return associative !== where;
+}
 
-  const nodeOp = (node as AST.BinaryExpression | AST.LogicalExpression)
-    .operator;
-  if (nodeOp === "**" && parent.operator === "**") {
-    return !isRight;
+function hasCallExpression(node: AST.Expression): boolean {
+  let cur = node;
+  while (true) {
+    if (cur.type === "CallExpression") {
+      return true;
+    } else if (cur.type === "MemberExpression") {
+      cur = cur.object;
+    } else {
+      return false;
+    }
   }
+}
 
-  if (isRight) {
-    return OPERATOR_PRECEDENCE[nodeOp] <= OPERATOR_PRECEDENCE[parent.operator];
-  }
-  return OPERATOR_PRECEDENCE[nodeOp] < OPERATOR_PRECEDENCE[parent.operator];
+function operandOfUnaryExprNeedsParens(node: AST.Expression): boolean {
+  return (
+    EXPRESSIONS_PRECEDENCE[node.type] < EXPRESSIONS_PRECEDENCE.UnaryExpression
+  );
+}
+
+export function expectAssignmentExprNeedsParen(
+  node: AST.Expression | AST.SpreadElement,
+): boolean {
+  return (
+    EXPRESSIONS_PRECEDENCE[node.type] <
+    EXPRESSIONS_PRECEDENCE.AssignmentExpression
+  );
+}
+
+export function expectLHSExprNeedsParen(
+  node: AST.Expression | AST.SpreadElement,
+): boolean {
+  return (
+    EXPRESSIONS_PRECEDENCE[node.type] < EXPRESSIONS_PRECEDENCE.MemberExpression
+  );
+}
+
+function commentNeedsNewline(comment: Comment): boolean {
+  if (comment.type === "Line") return true;
+  return comment.value.includes("\n");
 }
 
 function arrowConciseBodyNeedsWrap(
@@ -306,7 +416,7 @@ export const defaultPrinters = {
 // JS – Statements
 
 function printProgram(program: AST.Program, context: PrinterContext): void {
-  context.writeNodeListWithSourceGaps(program.body, "\n");
+  context.writeNodeListWithNewLineSep(program.body);
 }
 
 function printExpressionStatement(
@@ -317,6 +427,7 @@ function printExpressionStatement(
   if (
     expr.type === "ObjectExpression" ||
     expr.type === "FunctionExpression" ||
+    expr.type === "ClassExpression" ||
     (expr.type === "AssignmentExpression" && expr.left.type === "ObjectPattern")
   ) {
     context.write("(");
@@ -358,7 +469,14 @@ function printVariableDeclarator(
   }
   if (declarator.init) {
     context.write(" = ");
-    context.writeNode(declarator.init);
+    const needsParens = expectAssignmentExprNeedsParen(declarator.init);
+    if (needsParens) {
+      context.write("(");
+      context.writeNode(declarator.init);
+      context.write(")");
+    } else {
+      context.writeNode(declarator.init);
+    }
   }
 }
 
@@ -370,7 +488,7 @@ function printBlockStatement(
   context.write("{");
   if (body.length > 0) {
     context.write("\n");
-    context.writeNodeListWithSourceGaps(body, "\n");
+    context.writeNodeListWithNewLineSep(body);
     context.write("\n");
   }
   context.write("}");
@@ -660,12 +778,21 @@ function printUnaryExpression(
   if (expr.operator.length > 1) {
     context.write(" ");
   }
-  const argPrec = EXPRESSIONS_PRECEDENCE[expr.argument.type];
-  if (argPrec != null && argPrec < EXPRESSIONS_PRECEDENCE.UnaryExpression) {
+  const needsParen = operandOfUnaryExprNeedsParens(expr.argument);
+  if (needsParen) {
     context.write("(");
     context.writeNode(expr.argument);
     context.write(")");
   } else {
+    if (
+      expr.operator.length === 1 &&
+      (expr.argument.type === "UnaryExpression" ||
+        expr.argument.type === "UpdateExpression") &&
+      expr.argument.operator.startsWith(expr.operator)
+    ) {
+      // `- -x` or `+ ++x` should not be printed as `--x` or `+++x`
+      context.write(" ");
+    }
     context.writeNode(expr.argument);
   }
 }
@@ -704,7 +831,7 @@ function printBinaryExpression(
   const left = expression.left;
   const right = expression.right;
 
-  if (needsParens(left, expression, false)) {
+  if (operandOfBinaryExprNeedsParens(left, expression, "left")) {
     context.write("(");
     context.writeNode(left);
     context.write(")");
@@ -716,7 +843,7 @@ function printBinaryExpression(
   context.write(String(expression.operator));
   context.write(" ");
 
-  if (needsParens(right, expression, true)) {
+  if (operandOfBinaryExprNeedsParens(right, expression, "right")) {
     context.write("(");
     context.writeNode(right);
     context.write(")");
@@ -729,8 +856,7 @@ function printConditionalExpression(
   expr: AST.ConditionalExpression,
   context: PrinterContext,
 ): void {
-  const testPrec = EXPRESSIONS_PRECEDENCE[expr.test.type] ?? 20;
-  if (testPrec <= EXPRESSIONS_PRECEDENCE.ConditionalExpression) {
+  if (operandOfBinaryExprNeedsParens(expr.test, expr, "left")) {
     context.write("(");
     context.writeNode(expr.test);
     context.write(")");
@@ -740,7 +866,13 @@ function printConditionalExpression(
   context.write(" ? ");
   context.writeNode(expr.consequent);
   context.write(" : ");
-  context.writeNode(expr.alternate);
+  if (operandOfBinaryExprNeedsParens(expr.alternate, expr, "right")) {
+    context.write("(");
+    context.writeNode(expr.alternate);
+    context.write(")");
+  } else {
+    context.writeNode(expr.alternate);
+  }
 }
 
 function printYieldExpression(
@@ -753,12 +885,14 @@ function printYieldExpression(
     const leadingComments = context.options.getLeadingComments?.(expr.argument);
     const needsParensASi =
       leadingComments?.some((c) => commentNeedsNewline(c)) ?? false;
-    if (needsParensASi) {
+    const needsParens =
+      needsParensASi || expectAssignmentExprNeedsParen(expr.argument);
+    if (needsParens) {
       context.write("(");
-    }
-    context.writeNode(expr.argument);
-    if (needsParensASi) {
+      context.writeNode(expr.argument);
       context.write(")");
+    } else {
+      context.writeNode(expr.argument);
     }
   }
 }
@@ -769,8 +903,8 @@ function printAwaitExpression(
 ): void {
   context.write("await");
   if (expr.argument) {
-    const argPrec = EXPRESSIONS_PRECEDENCE[expr.argument.type];
-    if (argPrec != null && argPrec < EXPRESSIONS_PRECEDENCE.AwaitExpression) {
+    const needsParens = operandOfUnaryExprNeedsParens(expr.argument);
+    if (needsParens) {
       context.write(" (");
       context.writeNode(expr.argument);
       context.write(")");
@@ -785,17 +919,19 @@ function printSequenceExpression(
   expr: AST.SequenceExpression,
   context: PrinterContext,
 ): void {
-  context.write("(");
   context.writeNodeList(expr.expressions, ", ");
-  context.write(")");
 }
 
 function printCallExpression(
   expression: AST.CallExpression,
   context: PrinterContext,
 ): void {
-  const calleePrec = EXPRESSIONS_PRECEDENCE[expression.callee.type] ?? 20;
-  if (calleePrec < EXPRESSIONS_PRECEDENCE.CallExpression) {
+  const needsParens = operandOfBinaryExprNeedsParens(
+    expression.callee,
+    expression,
+    "left",
+  );
+  if (needsParens) {
     context.write("(");
     context.writeNode(expression.callee);
     context.write(")");
@@ -815,7 +951,7 @@ function printCallExpression(
   } else {
     context.write("(");
   }
-  context.writeNodeList(expression.arguments, ", ");
+  context.writeExpressionListWithCommaSep(expression.arguments);
   context.write(")");
 }
 
@@ -824,11 +960,12 @@ function printNewExpression(
   context: PrinterContext,
 ): void {
   context.write("new ");
-  const calleePrec = EXPRESSIONS_PRECEDENCE[expression.callee.type] ?? 20;
-  if (
-    calleePrec < EXPRESSIONS_PRECEDENCE.NewExpression ||
-    hasCallExpression(expression.callee)
-  ) {
+  const needsParens = operandOfBinaryExprNeedsParens(
+    expression.callee,
+    expression,
+    "left",
+  );
+  if (needsParens) {
     context.write("(");
     context.writeNode(expression.callee);
     context.write(")");
@@ -845,21 +982,8 @@ function printNewExpression(
   } else {
     context.write("(");
   }
-  context.writeNodeList(expression.arguments, ", ");
+  context.writeExpressionListWithCommaSep(expression.arguments);
   context.write(")");
-}
-
-function hasCallExpression(node: AST.Expression): boolean {
-  let cur: AST.Expression | undefined = node;
-  while (cur) {
-    if (cur.type === "CallExpression") return true;
-    if (cur.type === "MemberExpression") {
-      cur = cur.object;
-    } else {
-      return false;
-    }
-  }
-  return false;
 }
 
 function printChainExpression(
@@ -873,8 +997,12 @@ function printMemberExpression(
   expression: AST.MemberExpression,
   context: PrinterContext,
 ): void {
-  const objPrec = EXPRESSIONS_PRECEDENCE[expression.object.type] ?? 20;
-  if (objPrec < EXPRESSIONS_PRECEDENCE.MemberExpression) {
+  const needsParens = operandOfBinaryExprNeedsParens(
+    expression.object,
+    expression,
+    "left",
+  );
+  if (needsParens) {
     context.write("(");
     context.writeNode(expression.object);
     context.write(")");
@@ -915,7 +1043,7 @@ function printArrayExpression(
   context: PrinterContext,
 ): void {
   context.write("[");
-  context.writeNodeList(array.elements, ", ");
+  context.writeExpressionListWithCommaSep(array.elements);
   context.write("]");
 }
 
@@ -996,7 +1124,14 @@ function printSpreadElement(
   context: PrinterContext,
 ): void {
   context.write("...");
-  context.writeNode(spread.argument);
+  const needsParens = expectAssignmentExprNeedsParen(spread.argument);
+  if (needsParens) {
+    context.write("(");
+    context.writeNode(spread.argument);
+    context.write(")");
+  } else {
+    context.writeNode(spread.argument);
+  }
 }
 
 function printRestElement(
@@ -1037,7 +1172,14 @@ function printTaggedTemplateExpression(
   node: AST.TaggedTemplateExpression,
   context: PrinterContext,
 ): void {
-  context.writeNode(node.tag);
+  const needsParens = operandOfBinaryExprNeedsParens(node.tag, node, "left");
+  if (needsParens) {
+    context.write("(");
+    context.writeNode(node.tag);
+    context.write(")");
+  } else {
+    context.writeNode(node.tag);
+  }
   context.writeNode(node.quasi);
 }
 
@@ -1175,7 +1317,14 @@ function printClass(
   }
   if (node.superClass) {
     context.write("extends ");
-    context.writeNode(node.superClass);
+    const needsParens = expectLHSExprNeedsParen(node.superClass);
+    if (needsParens) {
+      context.write("(");
+      context.writeNode(node.superClass);
+      context.write(")");
+    } else {
+      context.writeNode(node.superClass);
+    }
     if (node.superTypeArguments) {
       context.writeNode(node.superTypeArguments);
     } else if (node.superTypeParameters) {
@@ -1197,7 +1346,7 @@ function printClassBody(node: AST.ClassBody, context: PrinterContext): void {
   const body = node.body;
   if (body.length > 0) {
     context.write("\n");
-    context.writeNodeListWithSourceGaps(body, "\n");
+    context.writeNodeListWithNewLineSep(body);
     context.write("\n");
   }
   context.write("}");
@@ -1211,15 +1360,43 @@ function printStaticBlock(
   const body = node.body;
   if (body.length > 0) {
     context.write("\n");
-    context.writeNodeListWithSourceGaps(body, "\n");
+    context.writeNodeListWithNewLineSep(body);
     context.write("\n");
   }
   context.write("}");
 }
 
+function validUnparenthesizedDecorator(node: AST.Expression): boolean {
+  let current: AST.Expression = node;
+  if (current.type === "CallExpression") {
+    current = current.callee;
+  }
+  if (current.type === "TSInstantiationExpression") {
+    current = current.expression;
+  }
+  while (true) {
+    if (current.type === "Identifier") {
+      return true;
+    } else if (current.type === "MemberExpression") {
+      if (current.computed) {
+        return false;
+      }
+      current = current.object;
+    } else {
+      return false;
+    }
+  }
+}
+
 function printDecorator(node: AST.Decorator, context: PrinterContext): void {
   context.write("@");
-  context.writeNode(node.expression);
+  if (!validUnparenthesizedDecorator(node.expression)) {
+    context.write("(");
+    context.writeNode(node.expression);
+    context.write(")");
+  } else {
+    context.writeNode(node.expression);
+  }
   context.write("\n");
 }
 
@@ -1375,13 +1552,17 @@ function printImportDeclaration(
   }
 
   if (namespaceSpec) {
-    if (wroteDefault) context.write(", ");
+    if (wroteDefault) {
+      context.write(", ");
+    }
     context.write("* as ");
     context.writeNode(namespaceSpec.local);
   }
 
   if (namedSpecs.length > 0) {
-    if (wroteDefault || namespaceSpec) context.write(", ");
+    if (wroteDefault || namespaceSpec) {
+      context.write(", ");
+    }
     context.write("{ ");
     context.writeNodeList(namedSpecs, ", ");
     context.write(" }");
@@ -1546,8 +1727,12 @@ function printTSAsExpression(
   expression: AST.TSAsExpression,
   context: PrinterContext,
 ): void {
-  const exprPrec = EXPRESSIONS_PRECEDENCE[expression.expression.type] ?? 20;
-  if (exprPrec < EXPRESSIONS_PRECEDENCE.TSAsExpression) {
+  const needsParens = operandOfBinaryExprNeedsParens(
+    expression.expression,
+    expression,
+    "left",
+  );
+  if (needsParens) {
     context.write("(");
     context.writeNode(expression.expression);
     context.write(")");
@@ -1562,8 +1747,12 @@ function printTSSatisfiesExpression(
   expression: AST.TSSatisfiesExpression,
   context: PrinterContext,
 ): void {
-  const exprPrec = EXPRESSIONS_PRECEDENCE[expression.expression.type] ?? 20;
-  if (exprPrec < EXPRESSIONS_PRECEDENCE.TSSatisfiesExpression) {
+  const needsParens = operandOfBinaryExprNeedsParens(
+    expression.expression,
+    expression,
+    "left",
+  );
+  if (needsParens) {
     context.write("(");
     context.writeNode(expression.expression);
     context.write(")");
@@ -1581,8 +1770,8 @@ function printTSTypeAssertion(
   context.write("<");
   context.writeNode(expression.typeAnnotation);
   context.write(">");
-  const exprPrec = EXPRESSIONS_PRECEDENCE[expression.expression.type] ?? 20;
-  if (exprPrec < EXPRESSIONS_PRECEDENCE.TSTypeAssertion) {
+  const needsParens = operandOfUnaryExprNeedsParens(expression.expression);
+  if (needsParens) {
     context.write("(");
     context.writeNode(expression.expression);
     context.write(")");
@@ -1595,7 +1784,18 @@ function printTSNonNullExpression(
   expression: AST.TSNonNullExpression,
   context: PrinterContext,
 ): void {
-  context.writeNode(expression.expression);
+  const needsParens = operandOfBinaryExprNeedsParens(
+    expression.expression,
+    expression,
+    "left",
+  );
+  if (needsParens) {
+    context.write("(");
+    context.writeNode(expression.expression);
+    context.write(")");
+  } else {
+    context.writeNode(expression.expression);
+  }
   context.write("!");
 }
 
@@ -1991,7 +2191,14 @@ function printTSMappedType(
   node: AST.TSMappedType,
   context: PrinterContext,
 ): void {
-  context.write("{ [");
+  context.write("{ ");
+  if (node.readonly) {
+    if (typeof node.readonly === "string") {
+      context.write(node.readonly);
+    }
+    context.write("readonly ");
+  }
+  context.write("[");
   const legacyTp = node.typeParameter;
   const key = node.key ?? legacyTp?.name;
   const constraint = node.constraint ?? legacyTp?.constraint;
@@ -2007,7 +2214,17 @@ function printTSMappedType(
     context.write(" in ");
     context.writeNode(constraint);
   }
+  if (node.nameType) {
+    context.write(" as ");
+    context.writeNode(node.nameType);
+  }
   context.write("]");
+  if (node.optional) {
+    if (typeof node.optional === "string") {
+      context.write(node.optional);
+    }
+    context.write("?");
+  }
   if (node.typeAnnotation) {
     context.write(": ");
     context.writeNode(node.typeAnnotation);
@@ -2164,11 +2381,18 @@ function printTSModuleDeclaration(
     context.write(String(kind) + " ");
     context.writeNode(node.id);
   }
-  if (node.body) {
-    if (node.body.type === "TSModuleBlock") {
-      context.write(" ");
-    }
-    context.writeNode(node.body);
+  let body = node.body as
+    | AST.TSModuleDeclaration
+    | AST.TSModuleBlock
+    | undefined;
+  while (body?.type === "TSModuleDeclaration") {
+    context.write(".");
+    context.writeNode(body.id);
+    body = body.body;
+  }
+  if (body) {
+    context.write(" ");
+    context.writeNode(body);
   }
 }
 
@@ -2177,7 +2401,7 @@ function printTSModuleBlock(
   context: PrinterContext,
 ): void {
   context.write("{\n");
-  context.writeNodeListWithSourceGaps(node.body, "\n");
+  context.writeNodeListWithNewLineSep(node.body);
   context.write("\n}");
 }
 
@@ -2272,5 +2496,16 @@ function writeOptionalTypeAnnotation(
   }
   if (node.typeAnnotation) {
     context.writeNode(node.typeAnnotation);
+  }
+}
+
+export function writeComment(comment: Comment, context: PrinterContext): void {
+  if (comment.type === "Line") {
+    context.write("//" + comment.value + "\n");
+  } else {
+    context.write("/*" + comment.value + "*/");
+    if (comment.value.includes("\n")) {
+      context.write("\n");
+    }
   }
 }

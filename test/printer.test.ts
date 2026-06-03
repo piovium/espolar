@@ -171,11 +171,11 @@ describe("print", () => {
       const literal = {
         type: "Literal",
         value: 1,
-      } as AST.Node;
+      } as AST.Expression;
       const program = {
         type: "Program",
         body: [
-          literal,
+          literal as AST.Node,
           null,
           {
             type: "Literal",
@@ -191,15 +191,15 @@ describe("print", () => {
           Program: (_node, context) => {
             context.write("");
             context.writeNode(null);
-            context.writeNodeListWithSourceGaps(program.body, "\n");
+            context.writeNodeListWithNewLineSep(program.body);
             context.writeSource(0, 0);
             context.write("|");
-            context.writeNodeList([literal, null, literal], ",");
+            context.writeExpressionListWithCommaSep([literal, null, literal]);
           },
         },
       });
 
-      expect(result.code).toBe("1\n2|1,,1");
+      expect(result.code).toBe("1\n2|1, , 1");
     });
 
     it("supports writePreservedNode", () => {
@@ -676,13 +676,6 @@ const x = 1;`);
       "const tmplStr = `hello ${name}`;",
       "const taggedStr = tag`hello ${name}`;",
       "",
-      // binary / logical precedence
-      "const pMul = 1 + 2 * 3;",
-      "const pNullish = (aa ?? bb) && cc;",
-      "const pExp = (aa ** bb) ** cc;",
-      "const pCond = aa > bb ? cc : (dd, ee);",
-      "const pAssign = (aa = bb) ? cc : dd;",
-      "",
       // unary / update / typeof
       "typeof yy;",
       "!flag;",
@@ -751,7 +744,10 @@ const x = 1;`);
       "type NamedTup = [label: string, value: number];",
       "type Idx = TK[K];",
       "type Cond = T extends U ? V : W;",
-      "type Mapped = { [K in keyof T]: T[K] };",
+      "type Mapped = { readonly [K in keyof T]: T[K] };",
+      "type PlusOptional = { [K in keyof T]+?: T[K] };",
+      "type MinusReadonly = { -readonly [K in keyof T]: T[K] };",
+      "type Remapped = { [K in keyof T as NewKey<K>]: T[K] };",
       "type InferCond = T extends infer R ? R : never;",
       "type StandaloneInfer = infer R;",
       "type TypeofX = typeof xVal;",
@@ -781,7 +777,9 @@ const x = 1;`);
       "m<T>(x: T): T;",
       "[method]?(): void;",
       "}",
-      "interface InOutIntf<in out T> {}",
+      "interface InOutIntf<in out T> {",
+      "[Symbol.iterator](): T;",
+      "}",
       "",
       // declare variants
       "declare interface IDI {};",
@@ -814,6 +812,7 @@ const x = 1;`);
       "namespace NNS {",
       "export const b = 1;",
       "}",
+      "namespace NNS.Nested { }",
       "",
       // parameter property
       "class PC { constructor(public readonly x: number) {} }",
@@ -866,6 +865,99 @@ const x = 1;`);
       "public override [methodK]() {}",
       "protected override readonly pw = 1;",
       "}",
+    ].join("\n");
+
+    const ast = parse(source);
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+
+    expect(result.code).toMatchSnapshot();
+  });
+
+  it("precedence parenthesization", () => {
+    const source = [
+      // optional chaining, call and new
+      "(a?.b).c;",
+      "a?.b.c;",
+      "(a?.b)();",
+      "(a?.())();",
+      "new (a?.b)();",
+      "a?.b();",
+      // -- below three are identical to `new new a ()()`
+      "new new a;",
+      "new new a();",
+      "new new a()();",
+      // -- calling `new new a ()()`
+      "new new a()() ();",
+      // -- a.b is the ctor, creating instance of it
+      "new a.b;",
+      "new a.b();",
+      // -- a.b is the ctor, calling the created instance
+      "new a.b() ();",
+      // -- a.b() is the ctor, creating instance of it
+      "new (a.b())();",
+      // -- a.b?.() is the ctor, calling instance of it
+      "new (a.b?.())();",
+      // continuous prefix -/+
+      "+ +a;",
+      "+(+a);",
+      "- --a;",
+      "+(++a);",
+      // exponentiation
+      "(aa ** bb) ** cc;",
+      "aa ** bb ** cc;",
+      "(await a) ** b;",
+      // TS assertion
+      "(<T> 0) ** 2;",
+      // basic arithmetic
+      "1 + 2 * 3;",
+      // logic operators
+      "(aa ?? bb) && cc;",
+      "(aa ?? bb) || cc;",
+      "aa || (bb ?? cc);",
+      "(aa || bb) && cc;",
+      // conditional expressions
+      "aa > bb ? cc : (dd, ee);",
+      "(aa = bb) ? cc : dd;",
+      // TS as/satisfies
+      "!(0 as number);",
+      "-(0 as number);",
+      "~(0 as number);",
+      "typeof (0 satisfies any);",
+      "void (0 as any);",
+      "1 + (0 satisfies number);",
+      "2 * (0 as number);",
+      "1 ** (0n satisfies any);",
+      "1 & 0 as number;", // no parens needed
+      // https://github.com/sveltejs/acorn-typescript/issues/45
+      // "0 as number ** 2;",
+      "await (0 as any);",
+      "await (0 satisfies number);",
+      "(await x)!;",
+      // commas
+      "a, b, c;",
+      "f((a, b), c);",
+      "[(a, b), ...(c, d)];",
+      // parentheses needed in special grammar production
+      "(function () {});",
+      "({});",
+      "(class {});",
+      "(async function () {});",
+      "(a || b)`string`",
+      "class A extends (B || C) {}",
+      // decorators
+      "@(a ? b : c) class C1 {}",
+      "@(a?.b()) class C2 {}",
+      "@(a().b) class C3 {}",
+      "@(a?.b) class C4 {}",
+      "@(a['b']) class C5 {}",
+      "@a.b class C6 {}",
+      "@a.b() class C7 {}",
+      // TODO: report a bug to acorn-typescript
+      // "@a.b<T> class C8 {}",
+      // "@a.b<T>() class C9 {}",
     ].join("\n");
 
     const ast = parse(source);
@@ -962,12 +1054,9 @@ describe("createExtraMapping", () => {
         printers: {
           Identifier: (_node, context) => {
             context.write("hi");
-            context.createExtraMapping(
-              { start: 0, end: 5 },
-              0,
-              2,
-              { label: "extra" },
-            );
+            context.createExtraMapping({ start: 0, end: 5 }, 0, 2, {
+              label: "extra",
+            });
           },
         },
       },

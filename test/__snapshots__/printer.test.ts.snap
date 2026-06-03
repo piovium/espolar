@@ -1,5 +1,73 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`print > precedence parenthesization 1`] = `
+"(a?.b).c;
+a?.b.c;
+(a?.b)();
+(a?.())();
+new (a?.b)();
+a?.b();
+new new a()();
+new new a()();
+new new a()();
+new new a()()();
+new a.b();
+new a.b();
+new a.b()();
+new (a.b())();
+new (a.b?.())();
++ +a;
++ +a;
+- --a;
++ ++a;
+(aa ** bb) ** cc;
+aa ** bb ** cc;
+(await a) ** b;
+(<T>0) ** 2;
+1 + 2 * 3;
+(aa ?? bb) && cc;
+(aa ?? bb) || cc;
+aa || (bb ?? cc);
+(aa || bb) && cc;
+aa > bb ? cc : (dd, ee);
+(aa = bb) ? cc : dd;
+!(0 as number);
+-(0 as number);
+~(0 as number);
+typeof (0 satisfies any);
+void (0 as any);
+1 + (0 satisfies number);
+2 * (0 as number);
+1 ** (0n satisfies any);
+1 & 0 as number;
+await (0 as any);
+await (0 satisfies number);
+(await x)!;
+a, b, c;
+f((a, b), c);
+[(a, b), ...(c, d)];
+(function() {});
+({  });
+(class {});
+(async function() {});
+(a || b)\`string\`;
+class A extends (B || C) {}
+@(a ? b : c)
+class C1 {}
+@(a?.b())
+class C2 {}
+@(a().b)
+class C3 {}
+@(a?.b)
+class C4 {}
+@(a['b'])
+class C5 {}
+@a.b
+class C6 {}
+@a.b()
+class C7 {}"
+`;
+
 exports[`print > structurally prints all JavaScript syntax preserving semantics 1`] = `
 "var aVar;
 let bVar = 1;
@@ -111,12 +179,6 @@ function withDefault(param = 1) {}
 const tmplStr = \`hello \${name}\`;
 const taggedStr = tag\`hello \${name}\`;
 
-const pMul = 1 + 2 * 3;
-const pNullish = (aa ?? bb) && cc;
-const pExp = (aa ** bb) ** cc;
-const pCond = aa > bb ? cc : (dd, ee);
-const pAssign = (aa = bb) ? cc : dd;
-
 typeof yy;
 !flag;
 zz++;
@@ -169,7 +231,10 @@ type Tup = [string, number, ...boolean[]];
 type NamedTup = [label: string, value: number];
 type Idx = TK[K];
 type Cond = T extends U ? V : W;
-type Mapped = { [K in keyof T]: T[K] };
+type Mapped = { readonly [K in keyof T]: T[K] };
+type PlusOptional = { [K in keyof T]+?: T[K] };
+type MinusReadonly = { -readonly [K in keyof T]: T[K] };
+type Remapped = { [K in keyof T as NewKey<K>]: T[K] };
 type InferCond = T extends infer R ? R : never;
 type StandaloneInfer = infer R;
 type TypeofX = typeof xVal;
@@ -191,7 +256,7 @@ interface INamed { readonly name?: string; }
 interface IChild extends Parent<string> { [key]?: number; }
 interface ISig { [index: string]: number; (x: number): string; new (x: number): ISig; }
 interface IMeth { m<T>(x: T): T; [method]?(): void; }
-interface InOutIntf<in out T> {}
+interface InOutIntf<in out T> { [Symbol.iterator](): T; }
 
 declare interface IDI {};
 declare const dv: number;
@@ -219,6 +284,9 @@ const enum CE { A, B }
 
 namespace NNS {
 export const b = 1;
+}
+namespace NNS.Nested {
+
 }
 
 class PC {

@@ -5,7 +5,11 @@ import type {
   PrinterContext,
   Printers,
 } from "./api.ts";
-import { defaultPrinters } from "./printers.ts";
+import {
+  defaultPrinters,
+  expectAssignmentExprNeedsParen,
+  writeComment,
+} from "./printers.ts";
 import type { AST, AST_NODE_TYPES, Comment, NodeLike } from "./types.ts";
 import {
   getNodeRange,
@@ -19,17 +23,6 @@ interface InternalPrinterContext extends PrinterContext<any> {
   // make typescript happy about complex types
   options: any;
   result(): PrintResult<any>;
-}
-
-function writeComment(context: InternalPrinterContext, comment: Comment): void {
-  if (comment.type === "Line") {
-    context.write("//" + comment.value + "\n");
-  } else {
-    context.write("/*" + comment.value + "*/");
-    if (comment.value.includes("\n")) {
-      context.write("\n");
-    }
-  }
 }
 
 export function print<Data = undefined>(
@@ -159,8 +152,8 @@ function createPrinterContext<Data>(
 
       const leadingComments = options.getLeadingComments?.(node);
       if (leadingComments) {
-        for (const c of leadingComments) {
-          writeComment(context, c);
+        for (const comment of leadingComments) {
+          writeComment(comment, context);
         }
       }
 
@@ -170,8 +163,8 @@ function createPrinterContext<Data>(
 
       const trailingComments = options.getTrailingComments?.(node);
       if (trailingComments) {
-        for (const c of trailingComments) {
-          writeComment(context, c);
+        for (const comment of trailingComments) {
+          writeComment(comment, context);
         }
       }
       // If children nodes don't emit any mapping but the parent node itself
@@ -203,7 +196,31 @@ function createPrinterContext<Data>(
         needsSeparator = true;
       }
     },
-    writeNodeListWithSourceGaps(nodes, fallbackSeparator) {
+    writeExpressionListWithCommaSep(nodes) {
+      let needsSeparator = false;
+      for (const node of nodes) {
+        if (!node) {
+          if (needsSeparator) {
+            context.write(", ");
+          }
+          continue;
+        }
+
+        if (needsSeparator) {
+          context.write(", ");
+        }
+        const needsParens = expectAssignmentExprNeedsParen(node);
+        if (needsParens) {
+          context.write("(");
+          context.writeNode(node);
+          context.write(")");
+        } else {
+          context.writeNode(node);
+        }
+        needsSeparator = true;
+      }
+    },
+    writeNodeListWithNewLineSep(nodes) {
       let lastRangeEnd: number | undefined;
       let wroteNode = false;
 
@@ -225,7 +242,7 @@ function createPrinterContext<Data>(
               getMappingData(null),
             );
           } else {
-            context.write(fallbackSeparator);
+            context.write("\n");
           }
         }
 
