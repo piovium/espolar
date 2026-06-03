@@ -95,6 +95,33 @@ describe("print", () => {
       expect(result.code).toBe(source);
     });
 
+    it("merges adjacent mappings with non-zero source offsets", () => {
+      const source = "0123456789";
+      const node = {
+        type: "Identifier",
+        start: 2,
+        end: 8,
+        name: "chunk",
+      } as AST.Identifier;
+
+      const result = print(node, {
+        source,
+        isUntouched: () => false,
+        printers: {
+          Identifier: (_node, context) => {
+            context.writeSource(2, 5, null);
+            context.writeSource(5, 8, null);
+          },
+        },
+      });
+
+      expect(result.code).toBe("234567");
+      expect(result.mappings).toHaveLength(1);
+      expect(result.mappings[0].sourceOffsets).toEqual([2]);
+      expect(result.mappings[0].generatedOffsets).toEqual([0]);
+      expect(result.mappings[0].lengths).toEqual([6]);
+    });
+
     it("supports getMappingData without combineMappingData", () => {
       const source = "const a = 1;\nconst b = 2;";
       const ast = parse(source);
@@ -301,17 +328,21 @@ describe("print", () => {
         (m) =>
           m.sourceOffsets[0] <= 7 && m.sourceOffsets[0] + m.lengths[0] >= 8,
       );
+      // foo(bar
       expect(callParen).toBeDefined();
-      expect(callParen!.generatedOffsets[0]).toBe(7);
-      expect(callParen!.data).toEqual({ label: "gap" });
+      expect(callParen!.sourceOffsets[0]).toBe(4);
+      expect(callParen!.lengths[0]).toBe(7);
+      expect(callParen!.data).toEqual({ label: "Identifier" });
 
+      // Baz(qux
       const newParen = result.mappings.find(
         (m) =>
           m.sourceOffsets[0] <= 21 && m.sourceOffsets[0] + m.lengths[0] >= 22,
       );
       expect(newParen).toBeDefined();
-      expect(newParen!.generatedOffsets[0]).toBe(21);
-      expect(newParen!.data).toEqual({ label: "gap" });
+      expect(newParen!.sourceOffsets[0]).toBe(18);
+      expect(newParen!.lengths[0]).toBe(7);
+      expect(newParen!.data).toEqual({ label: "Identifier" });
     });
 
     it("supports getMappingData for leaf node mappings", () => {

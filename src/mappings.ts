@@ -59,8 +59,8 @@ function canMerge<Data>(
   right: InternalMapping<Data>,
 ): boolean {
   return (
-    left.sourceStart + left.sourceEnd === right.sourceStart &&
-    left.generatedStart + left.generatedEnd === right.generatedStart
+    left.sourceEnd === right.sourceStart &&
+    left.generatedEnd === right.generatedStart
   );
 }
 
