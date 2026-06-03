@@ -6,7 +6,6 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text"],
       include: ["src/**/*.ts"],
-      exclude: ["src/api.ts", "src/types.ts"],
       thresholds: {
         branches: 75,
         functions: 80,

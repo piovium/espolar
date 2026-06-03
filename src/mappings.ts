@@ -29,10 +29,7 @@ export function getNodeRange(node: AST.Node): SourceRange | undefined {
     Number.isInteger(end) &&
     start <= end
   ) {
-    return {
-      start,
-      end,
-    };
+    return { start, end };
   }
 
   return undefined;
@@ -54,11 +51,19 @@ export function pushMapping<Data>(
   mappings.push(mapping);
 }
 
+/**
+ * Two adjacent mappings with identical lengths can be merged into one mapping.
+ * @param left 
+ * @param right 
+ * @returns 
+ */
 function canMerge<Data>(
   left: InternalMapping<Data>,
   right: InternalMapping<Data>,
 ): boolean {
   return (
+    left.sourceEnd - left.sourceStart === left.generatedEnd - left.generatedStart &&
+    right.sourceEnd - right.sourceStart === right.generatedEnd - right.generatedStart &&
     left.sourceEnd === right.sourceStart &&
     left.generatedEnd === right.generatedStart
   );

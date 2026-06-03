@@ -38,7 +38,7 @@ Single-package library. Six source files:
 
 - **Parser**: Tests use `acorn` + `@sveltejs/acorn-typescript` (NOT `@typescript-eslint/parser`). Parse options must include `locations: true, ranges: true`.
 - **Snapshots**: Two large snapshot tests cover all JS and TS syntax. Run `pnpm test -- -u` to update.
-- **Coverage thresholds**: branches 75%, functions 80%, lines 80%, statements 80%. `src/api.ts` and `src/types.ts` are excluded from coverage.
+- **Coverage thresholds**: branches 75%, functions 80%, lines 80%, statements 80%.
 
 ## Adding printers
 
