@@ -3,6 +3,7 @@
 exports[`print > precedence parenthesization 1`] = `
 "(a?.b).c;
 a?.b.c;
+(a?.b!).c;
 (a?.b)();
 (a?.())();
 new (a?.b)();

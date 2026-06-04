@@ -884,6 +884,7 @@ const x = 1;`);
       // optional chaining, call and new
       "(a?.b).c;",
       "a?.b.c;",
+      "(a?.b!).c;",
       "(a?.b)();",
       "(a?.())();",
       "new (a?.b)();",
