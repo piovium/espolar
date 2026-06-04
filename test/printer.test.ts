@@ -884,13 +884,55 @@ const x = 1;`);
       "(a?.b)();",
       "(a?.())();",
       "new (a?.b)();",
+      "new (a?.b).c();",
       "a?.b();",
+      // -- basic parenthesize
+      "new (a ? b() : c?.d)();",
+      "new (a && b || await c)();",
+      // -- tagged template
+      "new tag`template`;",
+      "new tag`tem${pla}te` ();",
+      "new tag.foo`template` ();",
+      // -- TS
+      "new a<T>();",
+      // TODO: acorn-typescript misparse below as `new a<T>()` without TSInstantiationExpression
+      // "new (a<T>)();",
+      "new a!.b();",
+      "new (a()!.b)();",
+      "new a()!.b();",
+      "new a<T>`foo` ()",
+      "new (a<T>)`foo` ()",
+      "new a!.b<T>`foo` ()",
+      "new (a()!.b<T>`foo`) ()",
+      // -- -- creating object with constructor `` tag.bar()`...` ``
+      "new (tag.bar()`template`) ();",
+      // -- -- object created with constructor `` tag.bar() `` used as tag
+      "new tag.bar() `template` ();",
+      // -- call-expression
+      // -- -- fn is the ctor, calling .foo method on the created instance
+      "new fn().foo();",
+      // -- -- fn().foo is the ctor, creating instance
+      "new (fn().foo)();",
+      // -- -- import() is the ctor, creating instance
+      "new import('mod').foo ();",
+      "new (import('mod').foo) ();",
+      // -- special properties
+      "new import.meta.foo();",
+      "new (import.meta.foo());",
+      "function f1() { new new.target(); }",
+      "function f2() { new (new.target()); }",
+      "class A1 { x = new super.bar(); }",
+      "class A2 { x = new (super.bar()); }",
       // -- below three are identical to `new new a ()()`
       "new new a;",
       "new new a();",
       "new new a()();",
       // -- calling `new new a ()()`
       "new new a()() ();",
+      // -- creating instance of `new a().b`
+      "new new a().b();",
+      // -- creating instance of `new a().b()`
+      "new (new a().b());",
       // -- a.b is the ctor, creating instance of it
       "new a.b;",
       "new a.b();",
@@ -913,6 +955,7 @@ const x = 1;`);
       "(<T> 0) ** 2;",
       // basic arithmetic
       "1 + 2 * 3;",
+      "(1 + 2) * 3;",
       // logic operators
       "(aa ?? bb) && cc;",
       "(aa ?? bb) || cc;",
@@ -936,15 +979,30 @@ const x = 1;`);
       "await (0 as any);",
       "await (0 satisfies number);",
       "(await x)!;",
+      // TS type-arguments
+      "f<T>();",
+      "(f<T>)();",
+      "g ? f<T> : f<U>;",
+      "(g ? f<T> : f<U>)();",
+      "f()<T>;",
+      "(f() as <T>() => T)<3>;",
+      "(f() as <T>() => T)<3>();",
       // commas
       "a, b, c;",
       "f((a, b), c);",
       "[(a, b), ...(c, d)];",
       // parentheses needed in special grammar production
       "(function () {});",
+      "(function () {} ['foo']);",
       "({});",
+      "({} + []);",
+      "({} as unknown);",
+      "({}!);",
       "(class {});",
+      "(class {} .foo);",
+      "(class {} `template`);",
       "(async function () {});",
+      "(async function () {}, bar);",
       "(a || b)`string`",
       "class A extends (B || C) {}",
       // decorators

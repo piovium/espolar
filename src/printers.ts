@@ -25,8 +25,6 @@ const EXPRESSIONS_PRECEDENCE = {
 
   MetaProperty: 17,
   MemberExpression: 17,
-  // Same precedence as MemberExpression, e.g. foo.bar<T>
-  TSInstantiationExpression: 17,
   // Same precedence as MemberExpression, e.g. foo!.bar
   TSNonNullExpression: 17,
   ChainExpression: 17,
@@ -34,6 +32,11 @@ const EXPRESSIONS_PRECEDENCE = {
   CallExpression: 17,
   TaggedTemplateExpression: 17,
   ImportExpression: 17,
+  // Between MemberExpression and NewExpression w/o arguments, e.g.
+  // f<T>.x // Error
+  // (f<T>).x // OK
+  // new f<T> // OK
+  TSInstantiationExpression: 16.5,
 
   // postfix operators
   UpdateExpression: 15,
@@ -43,12 +46,12 @@ const EXPRESSIONS_PRECEDENCE = {
   // behaves like postfix operators (e.g. cannot be part of LHS of **)
   TSTypeAssertion: 14,
 
+  // ranges from 13-5 depending on operator
+  BinaryExpression: 13,
   // as/satisfies have same precedence as relational operators
   TSAsExpression: 9,
   TSSatisfiesExpression: 9,
-
-  // ranges from 13-5 depending on operator
-  BinaryExpression: 13,
+  // ranges from 4-3 depending on operator
   LogicalExpression: 4,
 
   AssignmentExpression: 2,
@@ -117,6 +120,25 @@ function getPrecedence(node: AST.Expression | AST.PrivateIdentifier): number {
   return EXPRESSIONS_PRECEDENCE[node.type] ?? 20;
 }
 
+type ExpressionWithPrecedence = keyof typeof EXPRESSIONS_PRECEDENCE;
+type ExpressionTypeWithPrecedenceAs<T extends number> = {
+  [K in AST_NODE_TYPES]: K extends ExpressionWithPrecedence
+    ? (typeof EXPRESSIONS_PRECEDENCE)[K] extends T
+      ? K
+      : never
+    : never;
+}[AST_NODE_TYPES];
+
+// Expression with same precedence as MemberExpression
+type MemberLikeExpression = Extract<
+  AST.Expression,
+  {
+    type: ExpressionTypeWithPrecedenceAs<
+      typeof EXPRESSIONS_PRECEDENCE.MemberExpression
+    >;
+  }
+>;
+
 /**
  * Check whether the operand of a Binary/Logical/AssignmentExpression needs parentheses.
  * @param node
@@ -128,10 +150,11 @@ function operandOfBinaryExprNeedsParens(
   node: AST.Expression | AST.PrivateIdentifier,
   parent:
     | AST.MemberExpression
-    | AST.TSNonNullExpression
     | AST.CallExpression
     | AST.NewExpression
     | AST.TaggedTemplateExpression
+    | AST.TSInstantiationExpression
+    | AST.TSNonNullExpression
     | AST.TSAsExpression
     | AST.TSSatisfiesExpression
     | AST.BinaryExpression
@@ -140,9 +163,6 @@ function operandOfBinaryExprNeedsParens(
     | AST.ConditionalExpression,
   where: "left" | "right",
 ): boolean {
-  const precedence = getPrecedence(node);
-  const parentPrecedence = getPrecedence(parent);
-
   // In a BinaryExpression where LHS have a TS postfix, e.g.:
   //   (0 as number) & 1;
   //   (0 as number) | 1;
@@ -165,20 +185,8 @@ function operandOfBinaryExprNeedsParens(
     return true;
   }
 
-  // optional chain cannot appeared as LHS of MemberExpression-like
-  if (
-    precedence === EXPRESSIONS_PRECEDENCE.MemberExpression &&
-    node.type === "ChainExpression"
-  ) {
-    return true;
-  }
-  if (
-    parent.type === "NewExpression" &&
-    hasCallExpression(node as AST.Expression)
-  ) {
-    // new X(), X cannot contain CallExpression
-    return true;
-  }
+  const precedence = getPrecedence(node);
+  const parentPrecedence = getPrecedence(parent);
 
   if (
     parent.type === "BinaryExpression" &&
@@ -193,19 +201,52 @@ function operandOfBinaryExprNeedsParens(
     return precedence < parentPrecedence;
   }
 
+  // optional chain cannot appeared as LHS of MemberExpression-like
+  if (
+    precedence === EXPRESSIONS_PRECEDENCE.MemberExpression &&
+    node.type === "ChainExpression"
+  ) {
+    return true;
+  }
+  if (
+    parent.type === "NewExpression" &&
+    !validUnparenthesizedNewOperand(node as MemberLikeExpression)
+  ) {
+    // new X(), X cannot contain CallExpression
+    return true;
+  }
+
   const associative = ASSOCIATIVE[precedence] ?? "left";
   return associative !== where;
 }
 
-function hasCallExpression(node: AST.Expression): boolean {
-  let cur = node;
+/**
+ * A valid unparenthesized `new` operand must be a member chain
+ * which not contains a CallExpression
+ */
+function validUnparenthesizedNewOperand(node: MemberLikeExpression): boolean {
+  let cur: AST.Expression = node;
   while (true) {
     if (cur.type === "CallExpression") {
-      return true;
+      return false;
+    } else if (cur.type === "TSNonNullExpression") {
+      cur = cur.expression;
     } else if (cur.type === "MemberExpression") {
       cur = cur.object;
+    } else if (cur.type === "TaggedTemplateExpression") {
+      cur = cur.tag;
+    } else if (
+      cur.type === "MetaProperty" ||
+      cur.type === "NewExpression" ||
+      cur.type === "ImportExpression"
+    ) {
+      return true;
     } else {
-      return false;
+      // The operand is either:
+      // - an expression with higher precedence, no need to check further
+      // - an expression with lower precedence, will be inner-parenthesized later
+      // - a ChainExpression, will be inner-parenthesized later
+      return cur !== node;
     }
   }
 }
@@ -1179,6 +1220,9 @@ function printTaggedTemplateExpression(
     context.write(")");
   } else {
     context.writeNode(node.tag);
+  }
+  if (node.typeArguments) {
+    context.writeNode(node.typeArguments);
   }
   context.writeNode(node.quasi);
 }
@@ -2463,10 +2507,21 @@ function printTSNamespaceExportDeclaration(
 }
 
 function printTSInstantiationExpression(
-  node: { expression: AST.Node; typeArguments: AST.Node },
+  node: AST.TSInstantiationExpression,
   context: PrinterContext,
 ): void {
-  context.writeNode(node.expression);
+  const needsParens = operandOfBinaryExprNeedsParens(
+    node.expression,
+    node,
+    "left",
+  );
+  if (needsParens) {
+    context.write("(");
+    context.writeNode(node.expression);
+    context.write(")");
+  } else {
+    context.writeNode(node.expression);
+  }
   context.writeNode(node.typeArguments);
 }
 

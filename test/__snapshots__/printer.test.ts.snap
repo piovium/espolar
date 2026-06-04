@@ -6,11 +6,47 @@ a?.b.c;
 (a?.b)();
 (a?.())();
 new (a?.b)();
+new (a?.b).c();
 a?.b();
+new (a ? b() : c?.d)();
+new (a && b || await c)();
+new tag\`template\`();
+new tag\`tem\${pla}te\`();
+new tag.foo\`template\`();
+new a<T>();
+new a!.b();
+new (a()!.b)();
+new a()!.b();
+new a<T>\`foo\`();
+new (a<T>)\`foo\`();
+new a!.b<T>\`foo\`();
+new (a()!.b<T>\`foo\`)();
+new (tag.bar()\`template\`)();
+new tag.bar()\`template\`();
+new fn().foo();
+new (fn().foo)();
+new import('mod').foo();
+new import('mod').foo();
+new import.meta.foo();
+new (import.meta.foo())();
+function f1() {
+new new.target();
+}
+function f2() {
+new (new.target())();
+}
+class A1 {
+x = new super.bar();
+}
+class A2 {
+x = new (super.bar())();
+}
 new new a()();
 new new a()();
 new new a()();
 new new a()()();
+new new a().b();
+new (new a().b())();
 new a.b();
 new a.b();
 new a.b()();
@@ -25,6 +61,7 @@ aa ** bb ** cc;
 (await a) ** b;
 (<T>0) ** 2;
 1 + 2 * 3;
+(1 + 2) * 3;
 (aa ?? bb) && cc;
 (aa ?? bb) || cc;
 aa || (bb ?? cc);
@@ -43,13 +80,27 @@ void (0 as any);
 await (0 as any);
 await (0 satisfies number);
 (await x)!;
+f<T>();
+(f<T>)();
+g ? f<T> : f<U>;
+(g ? f<T> : f<U>)();
+f()<T>;
+(f() as <T>() => T)<3>;
+(f() as <T>() => T)<3>();
 a, b, c;
 f((a, b), c);
 [(a, b), ...(c, d)];
 (function() {});
+(function() {}['foo']);
 ({  });
+({  } + []);
+({  } as unknown);
+({  }!);
 (class {});
+(class {}.foo);
+(class {}\`template\`);
 (async function() {});
+(async function() {}, bar);
 (a || b)\`string\`;
 class A extends (B || C) {}
 @(a ? b : c)
