@@ -224,7 +224,7 @@ static {}
 const clsAnon = class {};
 const clsNamed = class NamedExpr {};
 
-const objLit = { val, [key]: get?.(), nested: { a: 1 }, list: [first, ...rest], get gProp() {}, set sProp(x) {} };
+const objLit = { val, [key]: get?.(), nested: { a: 1 }, list: [first, ...rest], get gProp() {}, set sProp(x) {}, method() {}, fn: function() {} };
 const { xx, ...restX } = objLit;
 const [yy, ...restY] = listVar;
 

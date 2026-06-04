@@ -1161,7 +1161,10 @@ function printProperty(
     }
 
     // shorthand method
-    if (value.type === "FunctionExpression") {
+    if (
+      value.type === "FunctionExpression" &&
+      (property.method || property.kind !== "init")
+    ) {
       if (property.kind !== "init") {
         context.write(property.kind + " ");
       }
@@ -1192,9 +1195,6 @@ function printProperty(
       context.writeNode(property.key);
       context.write("]: ");
     } else {
-      if (property.kind === "get" || property.kind === "set") {
-        context.write(property.kind + " ");
-      }
       context.writeNode(property.key);
       context.write(": ");
     }

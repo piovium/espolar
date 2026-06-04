@@ -665,6 +665,8 @@ const x = 1;`);
       "list: [first, ...rest],",
       "get gProp() {},",
       "set sProp(x) {},",
+      "method() {},",
+      "fn: function() {},",
       "};",
       "const { xx, ...restX } = objLit;",
       "const [yy, ...restY] = listVar;",
