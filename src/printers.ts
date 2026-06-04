@@ -460,17 +460,59 @@ function printProgram(program: AST.Program, context: PrinterContext): void {
   context.writeNodeListWithNewLineSep(program.body);
 }
 
+function canStartExpressionStatement(
+  node: AST.Expression | AST.PrivateIdentifier,
+): boolean {
+  let lhs: AST.Expression | AST.PrivateIdentifier;
+  switch (node.type) {
+    default:
+      return true;
+    case "ObjectExpression":
+    case "FunctionExpression":
+    case "ClassExpression":
+    case "ObjectPattern":
+      return false;
+    case "AssignmentExpression":
+    case "LogicalExpression":
+    case "BinaryExpression":
+      lhs = node.left;
+      break;
+    case "TSAsExpression":
+    case "TSSatisfiesExpression":
+    case "TSNonNullExpression":
+      lhs = node.expression;
+      break;
+    case "CallExpression":
+      lhs = node.callee;
+      break;
+    case "MemberExpression":
+      lhs = node.object;
+      break;
+    case "TaggedTemplateExpression":
+      lhs = node.tag;
+      break;
+    case "ConditionalExpression":
+      lhs = node.test;
+      break;
+    case "SequenceExpression":
+      return canStartExpressionStatement(node.expressions[0]);
+    case "UpdateExpression":
+      return canStartExpressionStatement(node.argument);
+    case "ChainExpression":
+      return canStartExpressionStatement(node.expression);
+  }
+  return (
+    operandOfBinaryExprNeedsParens(lhs, node, "left") ||
+    canStartExpressionStatement(lhs)
+  );
+}
+
 function printExpressionStatement(
   statement: AST.ExpressionStatement,
   context: PrinterContext,
 ): void {
   const expr = statement.expression;
-  if (
-    expr.type === "ObjectExpression" ||
-    expr.type === "FunctionExpression" ||
-    expr.type === "ClassExpression" ||
-    (expr.type === "AssignmentExpression" && expr.left.type === "ObjectPattern")
-  ) {
+  if (!canStartExpressionStatement(expr)) {
     context.write("(");
     context.writeNode(expr);
     context.write(");");

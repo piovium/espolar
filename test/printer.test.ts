@@ -994,10 +994,13 @@ const x = 1;`);
       // parentheses needed in special grammar production
       "(function () {});",
       "(function () {} ['foo']);",
+      "(function () {} ?.foo);",
+      "(function () {} ());",
       "({});",
       "({} + []);",
       "({} as unknown);",
       "({}!);",
+      "({ foo } = { foo: 1 });",
       "(class {});",
       "(class {} .foo);",
       "(class {} `template`);",
