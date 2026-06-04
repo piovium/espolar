@@ -1,4 +1,4 @@
-import { Parser } from "acorn";
+import { Parser, type Options } from "acorn";
 import { tsPlugin } from "@sveltejs/acorn-typescript";
 import { describe, expect, it } from "vitest";
 import { print } from "../src/index.ts";
@@ -6,12 +6,13 @@ import type { AST, Comment } from "../src/types.ts";
 
 const TsParser = Parser.extend(tsPlugin());
 
-function parse(source: string): AST.Program {
+function parse(source: string, options?: Partial<Options>): AST.Program {
   return TsParser.parse(source, {
     ecmaVersion: "latest",
     sourceType: "module",
     locations: true,
     ranges: true,
+    ...options,
   }) as AST.Program;
 }
 
@@ -1031,6 +1032,18 @@ const x = 1;`);
     });
 
     expect(result.code).toMatchSnapshot();
+  });
+
+  it("preserves parens around let[a] assignment in script mode", () => {
+    const source = "var let = [], a = 0; (let [a] = []);";
+    const ast = parse(source, { sourceType: "script" });
+
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+    });
+
+    expect(result.code).toBe("var let = [], a = 0; (let[a] = []);");
   });
 });
 
