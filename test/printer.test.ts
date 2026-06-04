@@ -1,7 +1,7 @@
 import { Parser } from "acorn";
 import { tsPlugin } from "@sveltejs/acorn-typescript";
 import { describe, expect, it } from "vitest";
-import { defaultCombineMappingData, print } from "../src/index.ts";
+import { print } from "../src/index.ts";
 import type { AST, Comment } from "../src/types.ts";
 
 const TsParser = Parser.extend(tsPlugin());
@@ -895,7 +895,7 @@ const x = 1;`);
       "new tag.foo`template` ();",
       // -- TS
       "new a<T>();",
-      // TODO: acorn-typescript misparse below as `new a<T>()` without TSInstantiationExpression
+      // https://github.com/sveltejs/acorn-typescript/issues/47
       // "new (a<T>)();",
       "new a!.b();",
       "new (a()!.b)();",
@@ -1016,8 +1016,9 @@ const x = 1;`);
       "@(a['b']) class C5 {}",
       "@a.b class C6 {}",
       "@a.b() class C7 {}",
-      // TODO: report a bug to acorn-typescript
-      // "@a.b<T> class C8 {}",
+      // https://github.com/sveltejs/acorn-typescript/issues/46
+      // "@a.b<T>",
+      // "class C8 {}",
       // "@a.b<T>() class C9 {}",
     ].join("\n");
 
