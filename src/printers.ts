@@ -487,6 +487,9 @@ function canStartExpressionStatement(
       break;
     case "MemberExpression":
       lhs = node.object;
+      if (node.computed && lhs.type === "Identifier" && lhs.name === "let") {
+        return false;
+      }
       break;
     case "TaggedTemplateExpression":
       lhs = node.tag;
