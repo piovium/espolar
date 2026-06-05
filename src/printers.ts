@@ -533,15 +533,9 @@ function printVariableDeclarator(
   context: PrinterContext,
 ): void {
   if (declarator.definite === true) {
-    context.write(String((declarator.id as AST.Identifier).name));
+    context.write(declarator.id.name);
     context.write("!");
-    writeOptionalTypeAnnotation(
-      declarator.id as unknown as {
-        optional?: boolean;
-        typeAnnotation?: AST.Node | null;
-      },
-      context,
-    );
+    writeOptionalTypeAnnotation(declarator.id, context);
   } else {
     context.writeNode(declarator.id);
   }
