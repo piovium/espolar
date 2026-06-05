@@ -225,6 +225,9 @@ function operandOfBinaryExprNeedsParens(
  * which not contains a CallExpression
  */
 function validUnparenthesizedNewOperand(node: MemberLikeExpression): boolean {
+  if (node.type === "ChainExpression" || node.type === "ImportExpression") {
+    return false;
+  }
   let cur: AST.Expression = node;
   while (true) {
     if (cur.type === "CallExpression") {
@@ -235,18 +238,8 @@ function validUnparenthesizedNewOperand(node: MemberLikeExpression): boolean {
       cur = cur.object;
     } else if (cur.type === "TaggedTemplateExpression") {
       cur = cur.tag;
-    } else if (
-      cur.type === "MetaProperty" ||
-      cur.type === "NewExpression" ||
-      cur.type === "ImportExpression"
-    ) {
-      return true;
     } else {
-      // The operand is either:
-      // - an expression with higher precedence, no need to check further
-      // - an expression with lower precedence, will be inner-parenthesized later
-      // - a ChainExpression, will be inner-parenthesized later
-      return cur !== node;
+      return true;
     }
   }
 }
@@ -277,30 +270,6 @@ export function expectLHSExprNeedsParen(
 function commentNeedsNewline(comment: Comment): boolean {
   if (comment.type === "Line") return true;
   return comment.value.includes("\n");
-}
-
-function arrowConciseBodyNeedsWrap(
-  body: AST.BlockStatement | AST.Expression,
-): boolean {
-  if (body.type === "BlockStatement") return false;
-  switch (body.type) {
-    case "ObjectExpression":
-      return true;
-    case "AssignmentExpression":
-      return body.left.type === "ObjectPattern";
-    case "LogicalExpression":
-      return body.left.type === "ObjectExpression";
-    case "ConditionalExpression":
-      return body.test.type === "ObjectExpression";
-    case "TSAsExpression":
-    case "TSSatisfiesExpression":
-    case "TSNonNullExpression":
-      return body.expression
-        ? arrowConciseBodyNeedsWrap(body.expression)
-        : false;
-    default:
-      return false;
-  }
 }
 
 // Printers
@@ -1345,6 +1314,60 @@ function printFunction(
   }
 }
 
+function canStartConciseBody(
+  body: AST.BlockStatement | AST.Expression | AST.PrivateIdentifier,
+): boolean {
+  if (body.type === "BlockStatement" || body.type === "PrivateIdentifier") {
+    return true;
+  }
+  if (expectAssignmentExprNeedsParen(body)) {
+    return false;
+  }
+  let lhs: AST.Expression | AST.PrivateIdentifier;
+  switch (body.type) {
+    default:
+      return true;
+    case "ObjectExpression":
+    case "FunctionExpression":
+    case "ClassExpression":
+    case "ObjectPattern":
+      return false;
+    case "AssignmentExpression":
+    case "LogicalExpression":
+    case "BinaryExpression":
+      lhs = body.left;
+      break;
+    case "TSAsExpression":
+    case "TSSatisfiesExpression":
+    case "TSNonNullExpression":
+      lhs = body.expression;
+      break;
+    case "CallExpression":
+      lhs = body.callee;
+      break;
+    case "MemberExpression":
+      lhs = body.object;
+      if (body.computed && lhs.type === "Identifier" && lhs.name === "let") {
+        return false;
+      }
+      break;
+    case "TaggedTemplateExpression":
+      lhs = body.tag;
+      break;
+    case "ConditionalExpression":
+      lhs = body.test;
+      break;
+    case "UpdateExpression":
+      return canStartConciseBody(body.argument);
+    case "ChainExpression":
+      return canStartConciseBody(body.expression);
+  }
+  return (
+    operandOfBinaryExprNeedsParens(lhs, body, "left") ||
+    canStartConciseBody(lhs)
+  );
+}
+
 function printArrowFunctionExpression(
   fn: AST.ArrowFunctionExpression,
   context: PrinterContext,
@@ -1361,7 +1384,7 @@ function printArrowFunctionExpression(
   writeReturnType(fn, context);
   context.write(" => ");
   const body = fn.body;
-  if (arrowConciseBodyNeedsWrap(body)) {
+  if (!canStartConciseBody(body)) {
     context.write("(");
     context.writeNode(body);
     context.write(")");

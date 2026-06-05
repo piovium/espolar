@@ -45,6 +45,7 @@ x = new (super.bar())();
 new new a()();
 new new a()();
 new new a()();
+new (import('mod'))();
 new new a()()();
 new new a().b();
 new (new a().b())();
@@ -96,6 +97,7 @@ f((a, b), c);
 (function() {}?.foo);
 (function() {}());
 ({  });
+({  } = {  });
 ({  } + []);
 ({  } as unknown);
 ({  }!);
@@ -106,7 +108,23 @@ f((a, b), c);
 (async function() {});
 (async function() {}, bar);
 (a || b)\`string\`;
+(a?.b)\`string\`;
+(a?.())\`string\`;
+(a?.[0])\`string\`;
+(!a?.b)\`string\`;
 class A extends (B || C) {}
+() => 1 + 2;
+() => (1 + 2) * 3;
+() => {};
+() => ({  });
+() => ({  } + []);
+() => ({  } ? 2 : 3);
+() => ({  }.foo);
+() => ({  }?.foo);
+() => ({  }?.foo).bar;
+() => ({  }\`template\`);
+() => ({  } = {  });
+() => (a, b);
 @(a ? b : c)
 class C1 {}
 @(a?.b())

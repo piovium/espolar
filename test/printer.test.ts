@@ -931,6 +931,8 @@ const x = 1;`);
       "new new a;",
       "new new a();",
       "new new a()();",
+      // -- ImportCall/SuperCall must be parenthesized
+      "new (import('mod'));",
       // -- calling `new new a ()()`
       "new new a()() ();",
       // -- creating instance of `new a().b`
@@ -1001,6 +1003,7 @@ const x = 1;`);
       "(function () {} ?.foo);",
       "(function () {} ());",
       "({});",
+      "({} = {});",
       "({} + []);",
       "({} as unknown);",
       "({}!);",
@@ -1010,8 +1013,25 @@ const x = 1;`);
       "(class {} `template`);",
       "(async function () {});",
       "(async function () {}, bar);",
-      "(a || b)`string`",
+      "(a || b)`string`;",
+      "(a?.b)`string`;",
+      "(a?.())`string`;",
+      "(a?.[0])`string`;",
+      "(!a?.b)`string`;",
       "class A extends (B || C) {}",
+      // concise body
+      "() => 1 + 2;",
+      "() => (1 + 2) * 3;",
+      "() => {};",
+      "() => ({});",
+      "() => ({} + []);",
+      "() => ({} ? 2 : 3);",
+      "() => ({} .foo);",
+      "() => ({} ?.foo);",
+      "() => ({} ?.foo).bar;",
+      "() => ({} `template`);",
+      "() => ({} = {});",
+      "() => (a, b);",
       // decorators
       "@(a ? b : c) class C1 {}",
       "@(a?.b()) class C2 {}",
