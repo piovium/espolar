@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`print > precedence parenthesization 1`] = `
+exports[`precedence parenthesization 1`] = `
 "(a?.b).c;
 a?.b.c;
 (a?.b!).c;
@@ -30,14 +30,10 @@ new import('mod').foo();
 new import('mod').foo();
 new import.meta.foo();
 new (import.meta.foo())();
-function f1() { new new.target();
-}
-function f2() { new (new.target())();
-}
-class A1 { x = new super.bar();
-}
-class A2 { x = new (super.bar())();
-}
+function f1() { new new.target(); }
+function f2() { new (new.target())(); }
+class A1 { x = new super.bar(); }
+class A2 { x = new (super.bar())(); }
 new new a()();
 new new a()();
 new new a()();
@@ -137,7 +133,7 @@ class C6 {}
 class C7 {}"
 `;
 
-exports[`print > structurally prints all JavaScript syntax preserving semantics 1`] = `
+exports[`structurally prints all JavaScript syntax preserving semantics 1`] = `
 "var aVar;
 let bVar = 1;
 const cVar = 2;
@@ -277,7 +273,7 @@ export * from 'modH';
 export * as ns2 from 'modI';"
 `;
 
-exports[`print > structurally prints all TypeScript syntax preserving semantics 1`] = `
+exports[`structurally prints all TypeScript syntax preserving semantics 1`] = `
 "let a!: number;
 let b: string;
 let c: boolean = true;
@@ -358,11 +354,9 @@ const enum CE { A, B }
 namespace NNS {
 export const b = 1;
 }
-namespace NNS.Nested {
-}
+namespace NNS.Nested { }
 
-class PC { constructor(public readonly x: number) {}
-}
+class PC { constructor(public readonly x: number) {} }
 
 @dec
 class Decorated {}
@@ -397,10 +391,8 @@ const typedVal: Box<number> = val satisfies Box<number>;
 const unaryAs = !aVal as T;
 
 function thisFunc(this: void) {}
-class ROClass { constructor(readonly x: number) {}
-}
-class PPClass { constructor(private readonly x: string) {}
-}
+class ROClass { constructor(readonly x: number) {} }
+class PPClass { constructor(private readonly x: string) {} }
 
 function assert(x: unknown): asserts x {}
 function assert2(cond: unknown): cond is string {}

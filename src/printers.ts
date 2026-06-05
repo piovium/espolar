@@ -1,4 +1,5 @@
 import type { PrinterContext, Printers } from "./api.ts";
+import type { SourceRange } from "./mappings.ts";
 import type { AST, AST_NODE_TYPES, Comment } from "./types.ts";
 
 /**
@@ -432,7 +433,14 @@ export const defaultPrinters = {
 // JS – Statements
 
 function printProgram(program: AST.Program, context: PrinterContext): void {
-  context.writeNodeListWithNewLineSep(program.body, program.range?.[0]);
+  let listRange: SourceRange | undefined;
+  if (program.range) {
+    listRange = {
+      start: program.range[0],
+      end: program.range[1],
+    };
+  }
+  context.writeNodeListWithNewLineSep(program.body, listRange);
 }
 
 function canStartExpressionStatement(
@@ -557,14 +565,14 @@ function printBlockStatement(
   const body = block.body;
   context.write("{");
   if (body.length > 0) {
-    let lastRangeEnd: number | undefined;
+    let listRange: SourceRange | undefined;
     if (block.range) {
-      lastRangeEnd = block.range[0] + 1;
-    } else {
-      context.write("\n");
+      listRange = {
+        start: block.range[0] + 1,
+        end: block.range[1] - 1,
+      };
     }
-    context.writeNodeListWithNewLineSep(body, lastRangeEnd);
-    context.write("\n");
+    context.writeNodeListWithNewLineSep(body, listRange);
   }
   context.write("}");
 }
@@ -1477,14 +1485,14 @@ function printClassBody(node: AST.ClassBody, context: PrinterContext): void {
   context.write("{");
   const body = node.body;
   if (body.length > 0) {
-    let lastRangeEnd: number | undefined;
+    let listRange: SourceRange | undefined;
     if (node.range) {
-      lastRangeEnd = node.range[0] + 1;
-    } else {
-      context.write("\n");
+      listRange = {
+        start: node.range[0] + 1,
+        end: node.range[1] - 1,
+      };
     }
-    context.writeNodeListWithNewLineSep(body, lastRangeEnd);
-    context.write("\n");
+    context.writeNodeListWithNewLineSep(body, listRange);
   }
   context.write("}");
 }
@@ -1496,14 +1504,14 @@ function printStaticBlock(
   context.write("static {");
   const body = node.body;
   if (body.length > 0) {
-    let lastRangeEnd: number | undefined;
+    let listRange: SourceRange | undefined;
     if (node.range) {
-      lastRangeEnd = node.range[0] + 1;
-    } else {
-      context.write("\n");
+      listRange = {
+        start: node.range[0] + 1,
+        end: node.range[1] - 1,
+      };
     }
-    context.writeNodeListWithNewLineSep(body, lastRangeEnd);
-    context.write("\n");
+    context.writeNodeListWithNewLineSep(body, listRange);
   }
   context.write("}");
 }
@@ -2543,14 +2551,15 @@ function printTSModuleBlock(
   context: PrinterContext,
 ): void {
   context.write("{");
-  let lastRangeEnd: number | undefined;
+  let listRange: SourceRange | undefined;
   if (node.range) {
-    lastRangeEnd = node.range[0] + 1;
-  } else {
-    context.write("\n");
+    listRange = {
+      start: node.range[0] + 1,
+      end: node.range[1] - 1,
+    };
   }
-  context.writeNodeListWithNewLineSep(node.body, lastRangeEnd);
-  context.write("\n}");
+  context.writeNodeListWithNewLineSep(node.body, listRange);
+  context.write("}");
 }
 
 function printTSDeclareFunction(

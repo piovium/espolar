@@ -41,6 +41,11 @@ export type PrintOptions<Data> = PrintOptionsBase<Data> &
     ? MappingDataUndefinedOptions
     : MappingDataOptions<Data>);
 
+export interface WriteNodeOptions {
+  noLeadingComment?: boolean;
+  noTrailingComment?: boolean;
+}
+
 export interface PrinterContext<Data = any> {
   readonly options: PrintOptions<Data>;
   readonly source: string;
@@ -52,22 +57,23 @@ export interface PrinterContext<Data = any> {
     sourceEnd: number,
     data?: Data,
   ): void;
-  writeNode(node: AST.Node | null | undefined): void;
+  writeNode(node: AST.Node | null | undefined, options?: WriteNodeOptions): void;
   writeNodeList(nodes: readonly (AST.Node | null)[], separator: string): void;
   writeExpressionListWithCommaSep(
     nodes: readonly (AST.Expression | AST.SpreadElement | null)[],
   ): void;
   /**
-   * Write `nodes` with "newline" separator, but if the node is ranged and either:
-   * - it is the first node with `lastRangeEnd` provided, or
-   * - the previous adjacent node is ranged too,
-   * Then the source text ranging between the two adjacent nodes will be preserved instead of printing a newline character.
+   * Write `nodes` with "newline" separator, but if for node either:
+   * - it is the first or the last node, ranged, and `listRange` is also provided,
+   * - two adjacent nodes are both ranged,
+   * Then the source text ranging between the two adjacent nodes/boundaries will be preserved 
+   * instead of printing a newline character.
    * @param nodes 
    * @param lastRangeEnd 
    */
   writeNodeListWithNewLineSep(
     nodes: readonly (AST.ProgramStatement | AST.ClassElement)[],
-    lastRangeEnd?: number,
+    listRange?: SourceRange,
   ): void;
   writeSource(start: number, end: number, data?: Data): void;
   writePreservedNode(node: AST.Node): void;

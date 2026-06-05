@@ -22,6 +22,7 @@ import {
 interface InternalPrinterContext extends PrinterContext<any> {
   // make typescript happy about complex types
   options: any;
+  _skipLeadingComment: boolean;
   result(): PrintResult<any>;
 }
 
@@ -97,6 +98,7 @@ function createPrinterContext<Data>(
 
   const context: InternalPrinterContext = {
     options: options,
+    _skipLeadingComment: false,
     source: options.source,
     get generatedOffset() {
       return generatedOffset;
@@ -121,7 +123,7 @@ function createPrinterContext<Data>(
         data ?? getMappingData(null),
       );
     },
-    writeNode(node) {
+    writeNode(node, writeOpt = {}) {
       if (!node) {
         return;
       }
@@ -150,10 +152,12 @@ function createPrinterContext<Data>(
         throw new Error(`No printer registered for node type ${node.type}`);
       }
 
-      const leadingComments = options.getLeadingComments?.(node);
-      if (leadingComments) {
-        for (const comment of leadingComments) {
-          writeComment(comment, context);
+      if (!writeOpt.noLeadingComment) {
+        const leadingComments = options.getLeadingComments?.(node);
+        if (leadingComments && !context._skipLeadingComment) {
+          for (const comment of leadingComments) {
+            writeComment(comment, context);
+          }
         }
       }
 
@@ -161,12 +165,15 @@ function createPrinterContext<Data>(
       printer(node, context);
       const generatedEnd = generatedOffset;
 
-      const trailingComments = options.getTrailingComments?.(node);
-      if (trailingComments) {
-        for (const comment of trailingComments) {
-          writeComment(comment, context);
+      if (!writeOpt.noTrailingComment) {
+        const trailingComments = options.getTrailingComments?.(node);
+        if (trailingComments) {
+          for (const comment of trailingComments) {
+            writeComment(comment, context);
+          }
         }
       }
+
       // If children nodes don't emit any mapping but the parent node itself
       // can produce mapping, add that mapping
       const lastMappingGeneratedEnd = mappings.at(-1)?.generatedEnd ?? 0;
@@ -220,26 +227,43 @@ function createPrinterContext<Data>(
         needsSeparator = true;
       }
     },
-    writeNodeListWithNewLineSep(nodes, lastRangeEnd) {
-      let wroteNode = false;
-      for (const node of nodes) {
+    writeNodeListWithNewLineSep(nodes, parentRange) {
+      let lastRangeEnd: number | undefined;
+      let trailingSepEnd: number | undefined;
+      if (parentRange) {
+        lastRangeEnd = parentRange.start;
+        trailingSepEnd = parentRange.end;
+      }
+      for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
         const range = getNodeRange(node);
+        let noLeadingComment = false;
+        let noTrailingComment =
+          i < nodes.length - 1
+            ? true
+            : range !== undefined && parentRange !== undefined;
         if (
           lastRangeEnd !== undefined &&
           range &&
           range.start >= lastRangeEnd
         ) {
           context.writeSource(lastRangeEnd, range.start, getMappingData(null));
-        } else if (wroteNode) {
+          noLeadingComment = true;
+        } else if (i > 0) {
           context.write("\n");
         }
-        context.writeNode(node);
-        wroteNode = true;
+        context.writeNode(node, {
+          noLeadingComment,
+          noTrailingComment,
+        });
         if (range) {
           lastRangeEnd = range.end;
         } else {
           lastRangeEnd = undefined;
         }
+      }
+      if (trailingSepEnd !== undefined && lastRangeEnd !== undefined) {
+        context.writeSource(lastRangeEnd, trailingSepEnd, getMappingData(null));
       }
     },
     writeSource(start, end, data) {
