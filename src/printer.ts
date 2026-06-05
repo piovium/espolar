@@ -220,35 +220,21 @@ function createPrinterContext<Data>(
         needsSeparator = true;
       }
     },
-    writeNodeListWithNewLineSep(nodes) {
-      let lastRangeEnd: number | undefined;
+    writeNodeListWithNewLineSep(nodes, lastRangeEnd) {
       let wroteNode = false;
-
       for (const node of nodes) {
-        if (!node) {
-          continue;
-        }
-
         const range = getNodeRange(node);
-        if (wroteNode) {
-          if (
-            lastRangeEnd !== undefined &&
-            range &&
-            range.start >= lastRangeEnd
-          ) {
-            context.writeSource(
-              lastRangeEnd,
-              range.start,
-              getMappingData(null),
-            );
-          } else {
-            context.write("\n");
-          }
+        if (
+          lastRangeEnd !== undefined &&
+          range &&
+          range.start >= lastRangeEnd
+        ) {
+          context.writeSource(lastRangeEnd, range.start, getMappingData(null));
+        } else if (wroteNode) {
+          context.write("\n");
         }
-
         context.writeNode(node);
         wroteNode = true;
-
         if (range) {
           lastRangeEnd = range.end;
         } else {

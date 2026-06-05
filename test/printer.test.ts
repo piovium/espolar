@@ -138,7 +138,7 @@ describe("print", () => {
     });
 
     it("supports explicit combineMappingData", () => {
-      const source = "const a = 1;\nconst b = 2;";
+      const source = "let a = 1;\na = 2;";
       const ast = parse(source);
 
       const result = print<string | null>(ast, {
@@ -146,12 +146,12 @@ describe("print", () => {
         isUntouched: (node) => node.type !== "Program",
         getMappingData: (node) => node?.type || null,
         combineMappingData: (left, right) =>
-          right === null ? left : `${left}+${right}`,
+          left === null ? right : right === null ? left : `${left}+${right}`,
       });
 
       expect(result.mappings).toHaveLength(1);
       expect(result.mappings[0].data).toBe(
-        "VariableDeclaration+VariableDeclaration",
+        "VariableDeclaration+ExpressionStatement",
       );
     });
 
@@ -168,7 +168,7 @@ describe("print", () => {
   });
 
   describe("printer context API", () => {
-    it("supports write, writeNode, writeNodeListWithSourceGaps, writeSource", () => {
+    it("supports write, writeNode, writeNodeListWithXxxSep, writeSource", () => {
       const literal = {
         type: "Literal",
         value: 1,
@@ -177,7 +177,6 @@ describe("print", () => {
         type: "Program",
         body: [
           literal as AST.Node,
-          null,
           {
             type: "Literal",
             value: 2,
@@ -359,8 +358,9 @@ describe("print", () => {
       });
 
       expect(result.code).toBe("const total = add(1, 2);");
-      expect(result.mappings).toHaveLength(4);
+      expect(result.mappings).toHaveLength(5);
       expect(result.mappings.map((mapping) => mapping.data)).toEqual([
+        undefined,
         "Identifier",
         "Identifier",
         "Literal",
@@ -445,7 +445,7 @@ const x = 1;`);
             ? [makeComment("Line", " ASI-safe")]
             : undefined,
       });
-      expect(result.code).toBe("function f() {\nreturn (// ASI-safe\nx);\n}");
+      expect(result.code).toBe("function f() { return (// ASI-safe\nx);\n}");
     });
 
     it("wraps throw argument in parens when leading comment needs newline", () => {
@@ -473,7 +473,7 @@ const x = 1;`);
             ? [makeComment("Line", " line")]
             : undefined,
       });
-      expect(result.code).toBe("function* g() {\nyield (// line\nval);\n}");
+      expect(result.code).toBe("function* g() { yield (// line\nval);\n}");
     });
 
     it("wraps suffix ++ operand in parens when trailing comment needs newline", () => {
@@ -501,7 +501,7 @@ const x = 1;`);
             ? [makeComment("Block", " ok ")]
             : undefined,
       });
-      expect(result.code).toBe("function f() {\nreturn /* ok */x;\n}");
+      expect(result.code).toBe("function f() { return /* ok */x;\n}");
     });
 
     it("does not wrap suffix ++ when trailing comment is single-line block comment", () => {
@@ -534,7 +534,7 @@ const x = 1;`);
             : undefined,
       });
       expect(result.code).toBe(
-        "function f() {\nreturn (// first\n/* second */x// after\n);\n}",
+        "function f() { return (// first\n/* second */x// after\n);\n}",
       );
     });
   });
@@ -723,6 +723,11 @@ const x = 1;`);
 
   it("structurally prints all TypeScript syntax preserving semantics", () => {
     const source = [
+      // Type Annotation in declarations
+      "let a!: number;",
+      "let b: string;",
+      "let c: boolean = true;",
+      "",
       // TS import/export variants
       "import { type impX } from 'a';",
       "import type { TT } from 'e';",

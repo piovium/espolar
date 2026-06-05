@@ -30,17 +30,13 @@ new import('mod').foo();
 new import('mod').foo();
 new import.meta.foo();
 new (import.meta.foo())();
-function f1() {
-new new.target();
+function f1() { new new.target();
 }
-function f2() {
-new (new.target())();
+function f2() { new (new.target())();
 }
-class A1 {
-x = new super.bar();
+class A1 { x = new super.bar();
 }
-class A2 {
-x = new (super.bar())();
+class A2 { x = new (super.bar())();
 }
 new new a()();
 new new a()();
@@ -282,7 +278,11 @@ export * as ns2 from 'modI';"
 `;
 
 exports[`print > structurally prints all TypeScript syntax preserving semantics 1`] = `
-"import { type impX } from 'a';
+"let a!: number;
+let b: string;
+let c: boolean = true;
+
+import { type impX } from 'a';
 import type { TT } from 'e';
 import type * as nsT from 'f';
 import X = require('g');
@@ -359,11 +359,9 @@ namespace NNS {
 export const b = 1;
 }
 namespace NNS.Nested {
-
 }
 
-class PC {
-constructor(public readonly x: number) {}
+class PC { constructor(public readonly x: number) {}
 }
 
 @dec
@@ -399,11 +397,9 @@ const typedVal: Box<number> = val satisfies Box<number>;
 const unaryAs = !aVal as T;
 
 function thisFunc(this: void) {}
-class ROClass {
-constructor(readonly x: number) {}
+class ROClass { constructor(readonly x: number) {}
 }
-class PPClass {
-constructor(private readonly x: string) {}
+class PPClass { constructor(private readonly x: string) {}
 }
 
 function assert(x: unknown): asserts x {}

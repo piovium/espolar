@@ -1,6 +1,10 @@
 import type { PrinterContext, Printers } from "./api.ts";
 import type { AST, AST_NODE_TYPES, Comment } from "./types.ts";
 
+/**
+ * Precedence table for expressions.
+ * @see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Operator_Precedence#table
+ */
 const EXPRESSIONS_PRECEDENCE = {
   // LHS of =, must NOT parenthesized
   ArrayPattern: 20,
@@ -48,7 +52,9 @@ const EXPRESSIONS_PRECEDENCE = {
 
   // ranges from 13-5 depending on operator
   BinaryExpression: 13,
-  // as/satisfies have same precedence as relational operators
+  // as/satisfies have same precedence as relational operators, e.g.
+  // `1 < 2 as number` is `(1 < 2) as number`, but
+  // `1 === 2 as number` is `1 === (2 as number)`
   TSAsExpression: 9,
   TSSatisfiesExpression: 9,
   // ranges from 4-3 depending on operator
@@ -426,7 +432,7 @@ export const defaultPrinters = {
 // JS – Statements
 
 function printProgram(program: AST.Program, context: PrinterContext): void {
-  context.writeNodeListWithNewLineSep(program.body);
+  context.writeNodeListWithNewLineSep(program.body, program.range?.[0]);
 }
 
 function canStartExpressionStatement(
@@ -518,9 +524,18 @@ function printVariableDeclarator(
   declarator: AST.VariableDeclarator,
   context: PrinterContext,
 ): void {
-  context.writeNode(declarator.id);
   if (declarator.definite === true) {
+    context.write(String((declarator.id as AST.Identifier).name));
     context.write("!");
+    writeOptionalTypeAnnotation(
+      declarator.id as unknown as {
+        optional?: boolean;
+        typeAnnotation?: AST.Node | null;
+      },
+      context,
+    );
+  } else {
+    context.writeNode(declarator.id);
   }
   if (declarator.init) {
     context.write(" = ");
@@ -542,8 +557,13 @@ function printBlockStatement(
   const body = block.body;
   context.write("{");
   if (body.length > 0) {
-    context.write("\n");
-    context.writeNodeListWithNewLineSep(body);
+    let lastRangeEnd: number | undefined;
+    if (block.range) {
+      lastRangeEnd = block.range[0] + 1;
+    } else {
+      context.write("\n");
+    }
+    context.writeNodeListWithNewLineSep(body, lastRangeEnd);
     context.write("\n");
   }
   context.write("}");
@@ -1457,8 +1477,13 @@ function printClassBody(node: AST.ClassBody, context: PrinterContext): void {
   context.write("{");
   const body = node.body;
   if (body.length > 0) {
-    context.write("\n");
-    context.writeNodeListWithNewLineSep(body);
+    let lastRangeEnd: number | undefined;
+    if (node.range) {
+      lastRangeEnd = node.range[0] + 1;
+    } else {
+      context.write("\n");
+    }
+    context.writeNodeListWithNewLineSep(body, lastRangeEnd);
     context.write("\n");
   }
   context.write("}");
@@ -1471,8 +1496,13 @@ function printStaticBlock(
   context.write("static {");
   const body = node.body;
   if (body.length > 0) {
-    context.write("\n");
-    context.writeNodeListWithNewLineSep(body);
+    let lastRangeEnd: number | undefined;
+    if (node.range) {
+      lastRangeEnd = node.range[0] + 1;
+    } else {
+      context.write("\n");
+    }
+    context.writeNodeListWithNewLineSep(body, lastRangeEnd);
     context.write("\n");
   }
   context.write("}");
@@ -2512,8 +2542,14 @@ function printTSModuleBlock(
   node: AST.TSModuleBlock,
   context: PrinterContext,
 ): void {
-  context.write("{\n");
-  context.writeNodeListWithNewLineSep(node.body);
+  context.write("{");
+  let lastRangeEnd: number | undefined;
+  if (node.range) {
+    lastRangeEnd = node.range[0] + 1;
+  } else {
+    context.write("\n");
+  }
+  context.writeNodeListWithNewLineSep(node.body, lastRangeEnd);
   context.write("\n}");
 }
 

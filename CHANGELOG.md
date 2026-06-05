@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## 0.4.x
+- `writeNodeListWithNewLineSep` now preserve leading whitespaces of node list if possible
+
 ## 0.3.x
 - `writeNodeListWithSourceGaps` removed, use `writeNodeListWithNewLineSep` instead
 

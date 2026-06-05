@@ -57,8 +57,17 @@ export interface PrinterContext<Data = any> {
   writeExpressionListWithCommaSep(
     nodes: readonly (AST.Expression | AST.SpreadElement | null)[],
   ): void;
+  /**
+   * Write `nodes` with "newline" separator, but if the node is ranged and either:
+   * - it is the first node with `lastRangeEnd` provided, or
+   * - the previous adjacent node is ranged too,
+   * Then the source text ranging between the two adjacent nodes will be preserved instead of printing a newline character.
+   * @param nodes 
+   * @param lastRangeEnd 
+   */
   writeNodeListWithNewLineSep(
     nodes: readonly (AST.ProgramStatement | AST.ClassElement)[],
+    lastRangeEnd?: number,
   ): void;
   writeSource(start: number, end: number, data?: Data): void;
   writePreservedNode(node: AST.Node): void;
