@@ -26,8 +26,7 @@ new (tag.bar()\`template\`)();
 new tag.bar()\`template\`();
 new fn().foo();
 new (fn().foo)();
-new import('mod').foo();
-new import('mod').foo();
+new (import('mod').foo)();
 new import.meta.foo();
 new (import.meta.foo())();
 function f1() { new new.target(); }

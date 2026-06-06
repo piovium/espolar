@@ -931,8 +931,6 @@ it("precedence parenthesization", () => {
     "new fn().foo();",
     // -- -- fn().foo is the ctor, creating instance
     "new (fn().foo)();",
-    // -- -- import() is the ctor, creating instance
-    "new import('mod').foo ();",
     "new (import('mod').foo) ();",
     // -- special properties
     "new import.meta.foo();",

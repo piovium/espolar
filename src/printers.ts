@@ -232,12 +232,9 @@ function operandOfBinaryExprNeedsParens(
  * which not contains a CallExpression
  */
 function validUnparenthesizedNewOperand(node: MemberLikeExpression): boolean {
-  if (node.type === "ChainExpression" || node.type === "ImportExpression") {
-    return false;
-  }
   let cur: AST.Expression = node;
   while (true) {
-    if (cur.type === "CallExpression") {
+    if (cur.type === "CallExpression" || cur.type === "ImportExpression") {
       return false;
     } else if (cur.type === "TSNonNullExpression") {
       cur = cur.expression;
@@ -522,7 +519,7 @@ function printVariableDeclaration(
   if (declaration.declare === true) {
     context.write("declare ");
   }
-  context.write(String(declaration.kind));
+  context.write(declaration.kind);
   context.write(" ");
   context.writeNodeList(declaration.declarations, ", ");
   context.write(";");
@@ -755,7 +752,7 @@ function printVariableDeclarationFor(
   declaration: AST.VariableDeclaration,
   context: PrinterContext,
 ): void {
-  context.write(String(declaration.kind));
+  context.write(declaration.kind);
   context.write(" ");
   context.writeNodeList(declaration.declarations, ", ");
 }
@@ -826,7 +823,7 @@ function printIdentifier(
   identifier: AST.Identifier,
   context: PrinterContext,
 ): void {
-  context.write(String(identifier.name));
+  context.write(identifier.name);
   writeOptionalTypeAnnotation(identifier, context);
 }
 
@@ -835,7 +832,7 @@ function printPrivateIdentifier(
   context: PrinterContext,
 ): void {
   context.write("#");
-  context.write(String(identifier.name));
+  context.write(identifier.name);
 }
 
 function printLiteral(literal: AST.Literal, context: PrinterContext): void {
@@ -917,7 +914,7 @@ function printBinaryExpression(
   }
 
   context.write(" ");
-  context.write(String(expression.operator));
+  context.write(expression.operator);
   context.write(" ");
 
   if (operandOfBinaryExprNeedsParens(right, expression, "right")) {
@@ -2522,7 +2519,7 @@ function printTSModuleDeclaration(
     const kind =
       (node as AST.TSModuleDeclaration).kind ??
       (node.id && node.id.type === "Literal" ? "module" : "namespace");
-    context.write(String(kind) + " ");
+    context.write(kind + " ");
     context.writeNode(node.id);
   }
   let body = node.body as
