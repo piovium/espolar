@@ -7,10 +7,14 @@ export interface PrintResult<Data> {
   mappings: Mapping<Data>[];
 }
 
+export const DO_NOT_COMBINE: unique symbol = Symbol.for(
+  "espolar/do-not-combine",
+);
+
 export interface PrintOptionsBase<Data> {
   source: string;
   isUntouched?: (node: AST.Node) => boolean | SourceRange;
-  combineMappingData?: (left: Data, right: Data) => Data;
+  combineMappingData?: (left: Data, right: Data) => Data | typeof DO_NOT_COMBINE;
   printers?: Printers<Data>;
   getLeadingComments?: (node: AST.Node) => Comment[] | undefined;
   getTrailingComments?: (node: AST.Node) => Comment[] | undefined;

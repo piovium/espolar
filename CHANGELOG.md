@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## 0.6.x
+- The default merging behavior of `left !== right` is abortion the merging, instead of throwing
+
 ## 0.5.x
 - `writeNodeListWithNewLineSep` also preserve trailing whitespaces of node list if possible
 

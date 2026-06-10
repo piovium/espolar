@@ -1,6 +1,7 @@
 import { Parser, type Options } from "acorn";
 import { tsPlugin } from "@sveltejs/acorn-typescript";
 import { describe, expect, it } from "vitest";
+import { DO_NOT_COMBINE } from "../src/api.ts";
 import { print } from "../src/index.ts";
 import type { AST, Comment } from "../src/types.ts";
 
@@ -153,6 +154,36 @@ describe("untouched preservation", () => {
     expect(result.mappings[0].data).toBe(
       "VariableDeclaration+ExpressionStatement",
     );
+  });
+
+  it("supports combineMappingData returning DO_NOT_COMBINE to prevent merging", () => {
+    const source = "0123456789";
+    const node = {
+      type: "Identifier",
+      start: 2,
+      end: 8,
+      name: "chunk",
+    } as AST.Identifier;
+
+    const result = print<string>(node, {
+      source,
+      isUntouched: () => false,
+      getMappingData: () => "d",
+      combineMappingData: () => DO_NOT_COMBINE,
+      printers: {
+        Identifier: (_node, context) => {
+          context.writeSource(2, 5);
+          context.writeSource(5, 8);
+        },
+      },
+    });
+
+    expect(result.code).toBe("234567");
+    expect(result.mappings).toHaveLength(2);
+    expect(result.mappings[0].sourceOffsets).toEqual([2]);
+    expect(result.mappings[0].lengths).toEqual([3]);
+    expect(result.mappings[1].sourceOffsets).toEqual([5]);
+    expect(result.mappings[1].lengths).toEqual([3]);
   });
 
   it("throws when isUntouched returns true but node has no source range", () => {

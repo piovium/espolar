@@ -1,9 +1,10 @@
-import type {
-  NodePrinter,
-  PrintOptions,
-  PrintResult,
-  PrinterContext,
-  Printers,
+import {
+  DO_NOT_COMBINE,
+  type NodePrinter,
+  type PrintOptions,
+  type PrintResult,
+  type PrinterContext,
+  type Printers,
 } from "./api.ts";
 import {
   defaultPrinters,
@@ -51,13 +52,14 @@ export function defaultIsUntouched(node: AST.Node): boolean | SourceRange {
   return getNodeRange(node) || false;
 }
 
-export function defaultCombineMappingData<T>(left: T, right: T): T {
+export function defaultCombineMappingData<T>(
+  left: T,
+  right: T,
+): T | typeof DO_NOT_COMBINE {
   if (left === right) {
     return left;
   }
-  throw new Error(
-    "Cannot combine mapping data with different values when no custom combineMappingData function is provided",
-  );
+  return DO_NOT_COMBINE;
 }
 
 function createPrinterContext<Data>(

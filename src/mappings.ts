@@ -1,5 +1,6 @@
 import type { Mapping } from "@volar/source-map";
 import type { AST } from "./types.ts";
+import { DO_NOT_COMBINE } from "./api.ts";
 
 export interface InternalMapping<Data = unknown> {
   sourceStart: number;
@@ -38,32 +39,39 @@ export function getNodeRange(node: AST.Node): SourceRange | undefined {
 export function pushMapping<Data>(
   mappings: InternalMapping<Data>[],
   mapping: InternalMapping<Data>,
-  combineMappingData: (left: Data, right: Data) => Data,
+  combineMappingData: (left: Data, right: Data) => Data | typeof DO_NOT_COMBINE,
 ): void {
   const previous = mappings.at(-1);
-  if (previous && canMerge(previous, mapping)) {
+  let combinedData: Data | typeof DO_NOT_COMBINE;
+  if (
+    previous &&
+    canMerge(previous, mapping) &&
+    (combinedData = combineMappingData(previous.data, mapping.data)) !==
+      DO_NOT_COMBINE
+  ) {
     previous.sourceEnd = mapping.sourceEnd;
     previous.generatedEnd = mapping.generatedEnd;
-    previous.data = combineMappingData(previous.data, mapping.data);
-    return;
+    previous.data = combinedData;
+  } else {
+    mappings.push(mapping);
   }
-
-  mappings.push(mapping);
 }
 
 /**
  * Two adjacent mappings with identical lengths can be merged into one mapping.
- * @param left 
- * @param right 
- * @returns 
+ * @param left
+ * @param right
+ * @returns
  */
 function canMerge<Data>(
   left: InternalMapping<Data>,
   right: InternalMapping<Data>,
 ): boolean {
   return (
-    left.sourceEnd - left.sourceStart === left.generatedEnd - left.generatedStart &&
-    right.sourceEnd - right.sourceStart === right.generatedEnd - right.generatedStart &&
+    left.sourceEnd - left.sourceStart ===
+      left.generatedEnd - left.generatedStart &&
+    right.sourceEnd - right.sourceStart ===
+      right.generatedEnd - right.generatedStart &&
     left.sourceEnd === right.sourceStart &&
     left.generatedEnd === right.generatedStart
   );
