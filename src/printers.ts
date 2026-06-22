@@ -1088,9 +1088,30 @@ function printMemberExpression(
     context.writeNode(expression.property);
     context.write("]");
   } else {
+    if (
+      expression.optional !== true &&
+      !needsParens &&
+      isDecimalIntegerLiteral(expression.object)
+    ) {
+      context.write(" ");
+    }
     context.write(expression.optional === true ? "?." : ".");
     context.writeNode(expression.property);
   }
+}
+
+function isDecimalIntegerLiteral(node: AST.Node): boolean {
+  if (node.type !== "Literal") {
+    return false;
+  }
+  const { value, raw } = node;
+  if (typeof value !== "number") {
+    return false;
+  }
+  if (typeof raw === "string") {
+    return /^[0-9][0-9_]*$/.test(raw);
+  }
+  return Number.isInteger(value);
 }
 
 function printObjectExpression(

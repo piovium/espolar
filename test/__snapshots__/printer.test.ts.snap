@@ -257,6 +257,15 @@ chainA?.();
 f({ x: 1 });
 f({  } = xVar);
 
+123 .toString();
+123..toString();
+123 .toString();
+1_000 .toString();
+123.0.toString();
+123?.toString();
+0xFF.toString();
+1e5.toString();
+
 import { impX } from 'modA';
 import impY from 'modB';
 import * as ns from 'modC';

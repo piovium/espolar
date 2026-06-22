@@ -735,6 +735,16 @@ it("structurally prints all JavaScript syntax preserving semantics", () => {
     "f({ x: 1 });",
     "f({} = xVar);",
     "",
+    // numeric literal disambiguation
+    "123 .toString();",
+    "123..toString();",
+    "(123).toString();",
+    "1_000 .toString();",
+    "123.0.toString();",
+    "123?.toString();",
+    "0xFF.toString();",
+    "1e5.toString();",
+    "",
     // imports (all forms, must be at top level)
     "import { impX } from 'modA';",
     "import impY from 'modB';",
