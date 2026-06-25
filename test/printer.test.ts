@@ -546,7 +546,8 @@ const x = 1;`;
   });
 
   it("prints multiple leading and trailing comments", () => {
-    const source = "function f() { return (// first\n/* second */x// after\n); }";
+    const source =
+      "function f() { return (// first\n/* second */x// after\n); }";
     const ast = parse(source);
     const result = print(ast, {
       source,
@@ -564,19 +565,137 @@ const x = 1;`;
   });
 
   it("comments between newline-seps", () => {
-    const source = "/* commentA */\nfunction a() {}\n\n/* commentB */\nfunction b() {}";
+    const source =
+      "/* commentA */\nfunction a() {}\n\n/* commentB */\nfunction b() {}";
     const ast = parse(source);
     const result = print(ast, {
       source,
       isUntouched: () => false,
       getLeadingComments: (node) => {
         if (node.type === "FunctionDeclaration" && node.id) {
-          return [makeComment("Block", ` comment${node.id.name.toUpperCase()} `)];
+          return [
+            makeComment("Block", ` comment${node.id.name.toUpperCase()} `),
+          ];
         }
-      }
+      },
     });
-    expect(result.code).toBe(`/* commentA */\nfunction a() {}\n\n/* commentB */\nfunction b() {}`);
-  })
+    expect(result.code).toBe(
+      `/* commentA */\nfunction a() {}\n\n/* commentB */\nfunction b() {}`,
+    );
+  });
+
+  describe("printCommentsOnUntouchedNodes option", () => {
+    it("prints leading comments on untouched nodes", () => {
+      const source = "const touched = 1;\n// comment\nconst untouched = 2;";
+      const ast = parse(source);
+      const untouchedDecl = ast.body[1] as AST.VariableDeclaration;
+
+      const result = print(ast, {
+        source,
+        isUntouched: (node) => node === untouchedDecl,
+        getLeadingComments: (node) => {
+          if (node === untouchedDecl) return [makeComment("Line", " comment")];
+        },
+        printCommentsOnUntouchedNodes: true,
+      });
+
+      expect(result.code).toBe(source);
+    });
+
+    it("no duplicate comment when source gap preserves", () => {
+      const source = "const touched = 1;\n// comment\nconst untouched = 2;";
+      const ast = parse(source);
+      const untouchedDecl = ast.body[1] as AST.VariableDeclaration;
+
+      const result = print(ast, {
+        source,
+        // both declarations are untouched (they have ranges), source gap preserves the comment
+        isUntouched: (node) => node !== ast,
+        getLeadingComments: (node) => {
+          if (node === untouchedDecl) return [makeComment("Line", " comment")];
+        },
+        printCommentsOnUntouchedNodes: true,
+      });
+
+      // Comment appears once from source gap, not duplicated by explicit printing
+      expect(result.code).toBe(source);
+    });
+
+    it("prints leading comment of untouched node if previous node lacks range", () => {
+      // First node is synthetic (no range), so gap preservation can't work.
+      // The untouched node's leading comment must be printed explicitly.
+      const source = "a;\n// comment\nconst untouched = 2;";
+      const fullAst = parse(source);
+      const untouchedDecl = fullAst.body[1] as AST.VariableDeclaration;
+
+      const syntheticExpr = {
+        type: "ExpressionStatement",
+        expression: { type: "Identifier", name: "a" },
+      };
+
+      const result = print(
+        {
+          type: "Program",
+          body: [syntheticExpr, untouchedDecl],
+          sourceType: "module",
+          start: 0,
+          end: source.length,
+          range: [0, source.length],
+        } as AST.Program,
+        {
+          source,
+          isUntouched: (node) => {
+            return node === untouchedDecl;
+          },
+          getLeadingComments: (node) => {
+            if (node === untouchedDecl)
+              return [makeComment("Line", " comment")];
+          },
+          printCommentsOnUntouchedNodes: true,
+        },
+      );
+
+      expect(result.code).toBe(source);
+    });
+
+    it("does not print comments on untouched nodes by default", () => {
+      // Without the option, untouched nodes skip explicit comment printing.
+      // Source gap can still preserve the comment if both nodes have ranges,
+      // so we use a synthetic first node (no range) to prevent gap preservation.
+      const source = "a;\n// comment\nconst untouched = 2;";
+      const fullAst = parse(source);
+      const untouchedDecl = fullAst.body[1] as AST.VariableDeclaration;
+
+      const syntheticExpr = {
+        type: "ExpressionStatement",
+        expression: { type: "Identifier", name: "a" },
+      };
+
+      const result = print(
+        {
+          type: "Program",
+          body: [syntheticExpr, untouchedDecl],
+          sourceType: "module",
+          start: 0,
+          end: source.length,
+          range: [0, source.length],
+        } as AST.Program,
+        {
+          source,
+          isUntouched: (node) => {
+            return node === untouchedDecl;
+          },
+          getLeadingComments: (node) => {
+            if (node === untouchedDecl)
+              return [makeComment("Line", " comment")];
+          },
+          // printCommentsOnUntouchedNodes defaults to false
+        },
+      );
+
+      expect(result.code).toBe("a;\nconst untouched = 2;");
+    });
+  });
 });
 
 it("structurally prints all JavaScript syntax preserving semantics", () => {

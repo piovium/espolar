@@ -19,6 +19,12 @@ export interface PrintOptionsBase<Data> {
   getLeadingComments?: (node: AST.Node) => Comment[] | undefined;
   getTrailingComments?: (node: AST.Node) => Comment[] | undefined;
   /**
+   * When true, leading/trailing comments on untouched nodes are printed if it's
+   * unable to be printed via gap preservation.
+   * @default false
+   */
+  printCommentsOnUntouchedNodes?: boolean;
+  /**
    * Provide additional source range for the left parenthesis of `CallExpression` and `NewExpression`.
    * This is useful for language tools that want to provide signature hints when user enter `(`.
    *

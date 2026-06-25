@@ -131,9 +131,22 @@ function createPrinterContext<Data>(
       }
 
       const range = getNodeRange(node);
-      const untouchedRet = isUntouched(node);
-      if (untouchedRet) {
-        const sourceRange = untouchedRet === true ? range : untouchedRet;
+      const untouched = isUntouched(node);
+      const printComments = !untouched || options.printCommentsOnUntouchedNodes;
+
+      if (printComments && !writeOpt.noLeadingComment) {
+        const leadingComments = options.getLeadingComments?.(node);
+        if (leadingComments && !context._skipLeadingComment) {
+          for (const comment of leadingComments) {
+            writeComment(comment, context);
+          }
+        }
+      }
+
+      const generatedStart = generatedOffset;
+
+      if (untouched) {
+        const sourceRange = untouched === true ? range : untouched;
         if (!sourceRange) {
           throw new Error(
             `Node of type ${node.type} is marked as untouched but does not have valid source offsets`,
@@ -144,30 +157,19 @@ function createPrinterContext<Data>(
           sourceRange.end,
           getMappingData(node),
         );
-        return;
-      }
-
-      const printer = printers[node.type] as
-        | NodePrinter<AST_NODE_TYPES, Data>
-        | undefined;
-      if (!printer) {
-        throw new Error(`No printer registered for node type ${node.type}`);
-      }
-
-      if (!writeOpt.noLeadingComment) {
-        const leadingComments = options.getLeadingComments?.(node);
-        if (leadingComments && !context._skipLeadingComment) {
-          for (const comment of leadingComments) {
-            writeComment(comment, context);
-          }
+      } else {
+        const printer = printers[node.type] as
+          | NodePrinter<AST_NODE_TYPES, Data>
+          | undefined;
+        if (!printer) {
+          throw new Error(`No printer registered for node type ${node.type}`);
         }
+        printer(node, context);
       }
 
-      const generatedStart = generatedOffset;
-      printer(node, context);
       const generatedEnd = generatedOffset;
 
-      if (!writeOpt.noTrailingComment) {
+      if (printComments && !writeOpt.noTrailingComment) {
         const trailingComments = options.getTrailingComments?.(node);
         if (trailingComments) {
           for (const comment of trailingComments) {
