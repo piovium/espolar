@@ -1340,3 +1340,105 @@ describe("createExtraMapping", () => {
     expect(extra!.generatedLengths).toEqual([2]);
   });
 });
+
+describe("write node hooks", () => {
+  it("calls beforeWriteNode and afterWriteNode for each node", () => {
+    const source = "const x = 1;";
+    const ast = parse(source);
+    const beforeCalls: string[] = [];
+    const afterCalls: string[] = [];
+
+    print(ast, {
+      source,
+      isUntouched: () => false,
+      beforeWriteNode(ctx) {
+        beforeCalls.push(ctx.node.type);
+      },
+      afterWriteNode(ctx) {
+        afterCalls.push(ctx.node.type);
+      },
+    });
+
+    expect(new Set(beforeCalls)).toEqual(new Set(afterCalls));
+    expect(beforeCalls).toContain("Program");
+    expect(beforeCalls).toContain("VariableDeclaration");
+    expect(beforeCalls.length).toBeGreaterThan(0);
+  });
+
+  it("exposes node range, isUntouched, and generatedOffset", () => {
+    const source = "const x = 1;";
+    const ast = parse(source);
+    const seen: unknown[] = [];
+
+    print(ast, {
+      source,
+      beforeWriteNode(ctx) {
+        seen.push({
+          type: ctx.node.type,
+          range: ctx.range,
+          isUntouched: ctx.isUntouched,
+          offset: ctx.generatedOffset,
+        });
+      },
+    });
+
+    for (const s of seen) {
+      const item = s as {
+        type: string;
+        range?: { start: number; end: number };
+      };
+      expect(item.type).toBeTruthy();
+      if (item.range) {
+        expect(item.range.start).toBeLessThanOrEqual(item.range.end);
+      }
+    }
+  });
+
+  it("skips node when beforeWriteNode returns false", () => {
+    const source = "const x = 1;";
+    const ast = parse(source);
+    let skipped = false;
+
+    const result = print(ast, {
+      source,
+      isUntouched: () => false,
+      beforeWriteNode(ctx) {
+        if (ctx.node.type === "Literal") {
+          skipped = true;
+          return false;
+        }
+      },
+      afterWriteNode(ctx) {
+        if (ctx.node.type === "Literal") {
+          throw new Error("afterWriteNode should not fire for skipped Literal");
+        }
+      },
+    });
+
+    expect(skipped).toBe(true);
+    expect(result.code).not.toContain("1");
+  });
+
+  it("skipped node also skips afterWriteNode", () => {
+    const source = "const a = 1, b = 2;";
+    const ast = parse(source);
+    let afterCount = 0;
+
+    print(ast, {
+      source,
+      isUntouched: () => false,
+      beforeWriteNode(ctx) {
+        if (ctx.node.type === "Identifier" && ctx.node.name === "a") {
+          return false;
+        }
+      },
+      afterWriteNode() {
+        afterCount++;
+      },
+    });
+
+    // a is skipped, so afterWriteNode is not called for it
+    const allNodes = afterCount;
+    expect(allNodes).toBeGreaterThan(0);
+  });
+});

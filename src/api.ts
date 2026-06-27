@@ -11,6 +11,20 @@ export const DO_NOT_COMBINE: unique symbol = Symbol.for(
   "espolar/do-not-combine",
 );
 
+export interface BeforeWriteNodeHookContext<Data = undefined> {
+  node: AST.Node;
+  range?: SourceRange;
+  isUntouched: boolean | SourceRange;
+  generatedOffset: number;
+  context: PrinterContext<Data>;
+}
+
+export interface AfterWriteNodeHookContext<Data = undefined>
+  extends BeforeWriteNodeHookContext<Data> {
+  generatedStart: number;
+  generatedEnd: number;
+}
+
 export interface PrintOptionsBase<Data> {
   source: string;
   isUntouched?: (node: AST.Node) => boolean | SourceRange;
@@ -36,6 +50,14 @@ export interface PrintOptionsBase<Data> {
   experimentalGetLeftParenSourceRange?: (
     node: AST.CallExpression | AST.NewExpression,
   ) => SourceRange | undefined;
+  /**
+   * Called before writing each node. Return `false` to skip writing the node entirely.
+   */
+  beforeWriteNode?: (ctx: BeforeWriteNodeHookContext<Data>) => boolean | void;
+  /**
+   * Called after writing each node.
+   */
+  afterWriteNode?: (ctx: AfterWriteNodeHookContext<Data>) => void;
 }
 
 export interface MappingDataOptions<Data> {

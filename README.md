@@ -78,6 +78,8 @@ Main entry point. Returns `PrintResult<Data>`.
 | `getMappingData`                | `(node?) => Data`                  | Extract data for each mapping entry. Default: `() => undefined`                            |
 | `combineMappingData`            | `(left, right) => Data`            | Merge data when adjacent mappings are combined. Default: throws if `left !== right`        |
 | `printers`                      | `Printers<Data>`                   | Override printers for specific `AST_NODE_TYPES`                                            |
+| `beforeWriteNode`               | `(context) => void \| false`       | Hooks executed before writing a node                                                       |
+| `afterWriteNode`                | `(context) => void `               | Hooks executed after writing a node                                                        |
 | `getLeadingComments`            | `(node) => Comment[] \| undefined` | Return comments to print before a touched node                                             |
 | `getTrailingComments`           | `(node) => Comment[] \| undefined` | Return comments to print after a touched node                                              |
 | `printCommentsOnUntouchedNodes` | `boolean`                          | Prints comments of untouched nodes when gap preservation cannot applies on                 |

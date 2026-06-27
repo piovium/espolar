@@ -6,6 +6,8 @@ export {
 export { defaultPrinters } from "./printers.ts";
 export {
   DO_NOT_COMBINE,
+  type AfterWriteNodeHookContext,
+  type BeforeWriteNodeHookContext,
   type NodePrinter,
   type PrintOptions,
   type PrintResult,

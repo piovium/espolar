@@ -132,8 +132,21 @@ function createPrinterContext<Data>(
 
       const range = getNodeRange(node);
       const untouched = isUntouched(node);
-      const printComments = !untouched || options.printCommentsOnUntouchedNodes;
 
+      if (options.beforeWriteNode) {
+        const result = options.beforeWriteNode({
+          node,
+          range,
+          isUntouched: untouched,
+          generatedOffset,
+          context: context as PrinterContext<Data>,
+        });
+        if (result === false) {
+          return;
+        }
+      }
+
+      const printComments = !untouched || options.printCommentsOnUntouchedNodes;
       if (printComments && !writeOpt.noLeadingComment) {
         const leadingComments = options.getLeadingComments?.(node);
         if (leadingComments && !context._skipLeadingComment) {
@@ -188,6 +201,18 @@ function createPrinterContext<Data>(
           generatedEnd,
           getMappingData(node),
         );
+      }
+
+      if (options.afterWriteNode) {
+        options.afterWriteNode({
+          node,
+          range,
+          isUntouched: untouched,
+          generatedOffset: generatedStart,
+          generatedStart,
+          generatedEnd: generatedOffset,
+          context: context as PrinterContext<Data>,
+        });
       }
     },
     writeNodeList(nodes, separator) {
