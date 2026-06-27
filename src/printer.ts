@@ -113,7 +113,7 @@ function createPrinterContext<Data>(
       generatedOffset += text.length;
     },
     writeMapped(text, sourceStart, sourceEnd, data) {
-      if (text.length === 0 || sourceEnd < sourceStart) {
+      if (sourceEnd < sourceStart) {
         return;
       }
       const generatedStart = generatedOffset;
