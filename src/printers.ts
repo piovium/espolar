@@ -1354,7 +1354,7 @@ function printFunction(
   }
 }
 
-function canStartConciseBody(
+export function canStartConciseBody(
   body: AST.BlockStatement | AST.Expression | AST.PrivateIdentifier,
 ): boolean {
   if (body.type === "BlockStatement" || body.type === "PrivateIdentifier") {

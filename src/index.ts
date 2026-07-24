@@ -3,7 +3,7 @@ export {
   defaultIsUntouched,
   print,
 } from "./printer.ts";
-export { defaultPrinters } from "./printers.ts";
+export { defaultPrinters, canStartConciseBody } from "./printers.ts";
 export {
   DO_NOT_COMBINE,
   type AfterWriteNodeHookContext,
