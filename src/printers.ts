@@ -1354,11 +1354,21 @@ function printFunction(
   }
 }
 
+/**
+ * Returns whether `body` can be printed as a concise body of an arrow function without parentheses.
+ * @param body
+ * @param customGuard If `customGuard(body)` returns true, then `body` will be considered as not being able to start a concise body.
+ * @returns
+ */
 export function canStartConciseBody(
   body: AST.BlockStatement | AST.Expression | AST.PrivateIdentifier,
+  customGuard: (node: AST.Expression) => boolean = () => false,
 ): boolean {
   if (body.type === "BlockStatement" || body.type === "PrivateIdentifier") {
     return true;
+  }
+  if (customGuard(body)) {
+    return false;
   }
   if (expectAssignmentExprNeedsParen(body)) {
     return false;
@@ -1398,13 +1408,13 @@ export function canStartConciseBody(
       lhs = body.test;
       break;
     case "UpdateExpression":
-      return canStartConciseBody(body.argument);
+      return canStartConciseBody(body.argument, customGuard);
     case "ChainExpression":
-      return canStartConciseBody(body.expression);
+      return canStartConciseBody(body.expression, customGuard);
   }
   return (
     operandOfBinaryExprNeedsParens(lhs, body, "left") ||
-    canStartConciseBody(lhs)
+    canStartConciseBody(lhs, customGuard)
   );
 }
 
