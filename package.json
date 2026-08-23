@@ -1,15 +1,12 @@
 {
   "name": "espolar",
-  "version": "0.6.5",
+  "version": "0.6.6",
   "type": "module",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "development": [
-        "./src/index.ts",
-        "./dist/index.js"
-      ],
+      "development": "./dist/index.js",
       "import": "./dist/index.js"
     }
   },
